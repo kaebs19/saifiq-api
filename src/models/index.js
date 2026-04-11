@@ -11,6 +11,7 @@ const Transaction = require('./Transaction');
 const Notification = require('./Notification');
 const Setting = require('./Setting');
 const Avatar = require('./Avatar');
+const Friendship = require('./Friendship');
 
 // ── User associations ──
 User.hasMany(MatchPlayer, { foreignKey: 'userId' });
@@ -48,6 +49,10 @@ UserItem.belongsTo(User, { foreignKey: 'userId' });
 // ── Notification associations ──
 Notification.belongsTo(User, { foreignKey: 'userId' });
 
+// ── Friendship associations ──
+Friendship.belongsTo(User, { as: 'requester', foreignKey: 'requesterId' });
+Friendship.belongsTo(User, { as: 'addressee', foreignKey: 'addresseeId' });
+
 module.exports = {
   User,
   Question,
@@ -61,5 +66,6 @@ module.exports = {
   Notification,
   Setting,
   Avatar,
+  Friendship,
   sequelize,
 };

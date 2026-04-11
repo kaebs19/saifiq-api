@@ -75,6 +75,11 @@ const User = sequelize.define('User', {
     type: DataTypes.STRING,
     allowNull: true,
   },
+  friendCode: {
+    type: DataTypes.STRING(8),
+    unique: true,
+    allowNull: true,
+  },
   role: {
     type: DataTypes.ENUM('player', 'admin'),
     defaultValue: 'player',

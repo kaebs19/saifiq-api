@@ -5,9 +5,14 @@ const jwksClient = require('jwks-rsa');
 const { Op } = require('sequelize');
 const { User } = require('../models');
 const AppError = require('../utils/AppError');
+const crypto = require('crypto');
 const { ROLES } = require('../config/constants');
 
 const googleClient = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
+
+const generateFriendCode = () => {
+  return crypto.randomBytes(3).toString('hex').toUpperCase(); // e.g. "A3F9K2"
+};
 
 const appleJwksClient = jwksClient({
   jwksUri: 'https://appleid.apple.com/auth/keys',
@@ -32,6 +37,7 @@ const sanitizeUser = (user) => ({
   role: user.role,
   avatarUrl: user.avatarUrl,
   country: user.country,
+  friendCode: user.friendCode,
 });
 
 // ── Admin Login ──
@@ -83,6 +89,7 @@ const register = async ({ username, email, password, country }) => {
     email,
     passwordHash,
     country,
+    friendCode: generateFriendCode(),
     role: ROLES.PLAYER,
   });
 
@@ -150,6 +157,7 @@ const googleLogin = async (idToken) => {
       email,
       googleId,
       avatarUrl: picture,
+      friendCode: generateFriendCode(),
       role: ROLES.PLAYER,
     });
   }
@@ -196,6 +204,7 @@ const appleLogin = async (identityToken, fullName) => {
       username: uniqueUsername,
       email: email || `${appleId}@privaterelay.appleid.com`,
       appleId,
+      friendCode: generateFriendCode(),
       role: ROLES.PLAYER,
     });
   }
@@ -207,7 +216,7 @@ const appleLogin = async (identityToken, fullName) => {
 
 const getMe = async (userId) => {
   const user = await User.findByPk(userId, {
-    attributes: ['id', 'username', 'email', 'role', 'avatarUrl', 'level', 'gems', 'country', 'createdAt'],
+    attributes: ['id', 'username', 'email', 'role', 'avatarUrl', 'level', 'gems', 'country', 'friendCode', 'createdAt'],
   });
   if (!user) throw new AppError('\u0627\u0644\u0645\u0633\u062A\u062E\u062F\u0645 \u063A\u064A\u0631 \u0645\u0648\u062C\u0648\u062F', 404);
   return user;

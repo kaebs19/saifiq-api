@@ -2,6 +2,7 @@ const { socketAuth } = require('./auth.middleware');
 const { setIo, registerUser, removeUser, getOnlineCount } = require('./connectionManager');
 const { registerQueueHandlers } = require('./handlers/queue.handler');
 const { registerMatchHandlers } = require('./handlers/match.handler');
+const { registerRoomHandlers } = require('./handlers/room.handler');
 
 const initSocketServer = (io) => {
   setIo(io);
@@ -16,6 +17,7 @@ const initSocketServer = (io) => {
 
     registerQueueHandlers(io, socket);
     registerMatchHandlers(io, socket);
+    registerRoomHandlers(io, socket);
 
     socket.on('disconnect', () => {
       removeUser(userId, socket.id);

@@ -12,6 +12,11 @@ const contentRoutes = require('./content.routes');
 const spinRoutes = require('./spin.routes');
 const dailyRewardRoutes = require('./dailyReward.routes');
 const avatarRoutes = require('./avatar.routes');
+const friendRoutes = require('./friend.routes');
+
+const asyncHandler = require('../middleware/asyncHandler');
+const ApiResponse = require('../utils/ApiResponse');
+const roomService = require('../services/room.service');
 
 const router = Router();
 
@@ -28,5 +33,21 @@ router.use('/content', contentRoutes);
 router.use('/spin', spinRoutes);
 router.use('/daily-reward', dailyRewardRoutes);
 router.use('/avatars', avatarRoutes);
+router.use('/friends', friendRoutes);
+
+// Room info (public — for invite links)
+router.get('/rooms/:code', asyncHandler(async (req, res) => {
+  const room = await roomService.getRoomByCode(req.params.code);
+  if (!room) return ApiResponse.success(res, null, 'الغرفة غير موجودة', 404);
+  const required = roomService.REQUIRED[room.mode];
+  ApiResponse.success(res, {
+    code: room.code,
+    mode: room.mode,
+    hostName: room.players[0]?.username,
+    playerCount: room.players.length,
+    required,
+    isFull: room.players.length >= required,
+  });
+}));
 
 module.exports = router;
