@@ -213,6 +213,42 @@ const getMe = async (userId) => {
   return user;
 };
 
+// ── Update Profile ──
+
+const updateProfile = async (userId, { username, country }) => {
+  const user = await User.findByPk(userId);
+  if (!user) throw new AppError('المستخدم غير موجود', 404);
+
+  if (username && username !== user.username) {
+    const existing = await User.findOne({ where: { username } });
+    if (existing) throw new AppError('اسم المستخدم مستخدم مسبقاً', 409);
+  }
+
+  const updates = {};
+  if (username) updates.username = username;
+  if (country !== undefined) updates.country = country;
+
+  await user.update(updates);
+  return sanitizeUser(user);
+};
+
+// ── Upload Avatar ──
+
+const uploadAvatar = async (userId, file) => {
+  const { deleteUpload } = require('../config/upload');
+  const user = await User.findByPk(userId);
+  if (!user) throw new AppError('المستخدم غير موجود', 404);
+
+  // Delete old avatar if it's a local upload
+  if (user.avatarUrl && user.avatarUrl.startsWith('/uploads/')) {
+    deleteUpload(user.avatarUrl);
+  }
+
+  const avatarUrl = `/uploads/avatars/${file.filename}`;
+  await user.update({ avatarUrl });
+  return { avatarUrl };
+};
+
 // ── Utils ──
 
 const ensureUniqueUsername = async (base) => {
@@ -225,4 +261,4 @@ const ensureUniqueUsername = async (base) => {
   return username;
 };
 
-module.exports = { adminLogin, register, login, googleLogin, appleLogin, getMe };
+module.exports = { adminLogin, register, login, googleLogin, appleLogin, getMe, updateProfile, uploadAvatar };

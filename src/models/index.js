@@ -10,6 +10,7 @@ const RoundQuestion = require('./RoundQuestion');
 const Transaction = require('./Transaction');
 const Notification = require('./Notification');
 const Setting = require('./Setting');
+const Avatar = require('./Avatar');
 
 // ── User associations ──
 User.hasMany(MatchPlayer, { foreignKey: 'userId' });
@@ -59,5 +60,6 @@ module.exports = {
   Transaction,
   Notification,
   Setting,
+  Avatar,
   sequelize,
 };

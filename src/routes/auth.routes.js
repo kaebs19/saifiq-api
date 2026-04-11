@@ -1,6 +1,7 @@
 const { Router } = require('express');
 const {
   adminLogin, register, login, googleSignIn, appleSignIn, me,
+  updateProfile, uploadAvatar,
   forgotPassword, verifyResetCode, resetPassword,
 } = require('../controllers/auth.controller');
 const { authenticate } = require('../middleware/auth');
@@ -9,7 +10,11 @@ const { authLimiter } = require('../middleware/rateLimit');
 const {
   adminLoginSchema, registerSchema, loginSchema, googleSchema, appleSchema,
   forgotPasswordSchema, verifyResetCodeSchema, resetPasswordSchema,
+  updateProfileSchema,
 } = require('../validators/auth.validator');
+const { createImageUploader } = require('../config/upload');
+
+const avatarUpload = createImageUploader('avatars');
 
 const router = Router();
 
@@ -24,5 +29,7 @@ router.post('/verify-reset-code', authLimiter, validate(verifyResetCodeSchema), 
 router.post('/reset-password', authLimiter, validate(resetPasswordSchema), resetPassword);
 
 router.get('/me', authenticate, me);
+router.patch('/me', authenticate, validate(updateProfileSchema), updateProfile);
+router.post('/me/avatar', authenticate, avatarUpload.single('avatar'), uploadAvatar);
 
 module.exports = router;

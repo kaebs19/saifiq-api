@@ -76,6 +76,16 @@ const resetPasswordSchema = Joi.object({
   }),
 });
 
+const updateProfileSchema = Joi.object({
+  username: Joi.string().min(3).max(30).optional().messages({
+    'string.min': 'اسم المستخدم يجب أن يكون 3 أحرف على الأقل',
+    'string.max': 'اسم المستخدم يجب ألا يتجاوز 30 حرف',
+  }),
+  country: Joi.string().max(5).allow('', null).optional(),
+}).min(1).messages({
+  'object.min': 'يجب إرسال حقل واحد على الأقل للتعديل',
+});
+
 module.exports = {
   adminLoginSchema,
   registerSchema,
@@ -85,4 +95,5 @@ module.exports = {
   forgotPasswordSchema,
   verifyResetCodeSchema,
   resetPasswordSchema,
+  updateProfileSchema,
 };

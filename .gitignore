@@ -4,5 +4,8 @@ node_modules/
 *.p8
 firebase-service-account.json
 uploads/
+!uploads/avatars/
+uploads/avatars/*
+!uploads/avatars/defaults/
 client/node_modules/
 client/dist/

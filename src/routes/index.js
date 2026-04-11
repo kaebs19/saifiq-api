@@ -11,6 +11,7 @@ const matchRoutes = require('./match.routes');
 const contentRoutes = require('./content.routes');
 const spinRoutes = require('./spin.routes');
 const dailyRewardRoutes = require('./dailyReward.routes');
+const avatarRoutes = require('./avatar.routes');
 
 const router = Router();
 
@@ -26,5 +27,6 @@ router.use('/admin/matches', matchRoutes);
 router.use('/content', contentRoutes);
 router.use('/spin', spinRoutes);
 router.use('/daily-reward', dailyRewardRoutes);
+router.use('/avatars', avatarRoutes);
 
 module.exports = router;

@@ -35,6 +35,19 @@ const me = asyncHandler(async (req, res) => {
   ApiResponse.success(res, user);
 });
 
+const updateProfile = asyncHandler(async (req, res) => {
+  const user = await authService.updateProfile(req.user.id, req.body);
+  ApiResponse.success(res, user, 'تم تحديث الملف الشخصي');
+});
+
+const uploadAvatar = asyncHandler(async (req, res) => {
+  if (!req.file) {
+    return ApiResponse.success(res, null, 'لم يتم إرسال صورة', 400);
+  }
+  const data = await authService.uploadAvatar(req.user.id, req.file);
+  ApiResponse.success(res, data, 'تم رفع الصورة الشخصية');
+});
+
 const forgotPassword = asyncHandler(async (req, res) => {
   await passwordResetService.forgotPassword(req.body.email);
   ApiResponse.success(res, null, '\u0625\u0630\u0627 \u0643\u0627\u0646 \u0627\u0644\u0628\u0631\u064A\u062F \u0645\u0633\u062C\u0644\u0627\u064B\u060C \u0633\u062A\u0635\u0644\u0643 \u0631\u0633\u0627\u0644\u0629 \u0628\u0631\u0645\u0632 \u0627\u0644\u0625\u0633\u062A\u0639\u0627\u062F\u0629');
@@ -52,5 +65,6 @@ const resetPassword = asyncHandler(async (req, res) => {
 
 module.exports = {
   adminLogin, register, login, googleSignIn, appleSignIn, me,
+  updateProfile, uploadAvatar,
   forgotPassword, verifyResetCode, resetPassword,
 };
