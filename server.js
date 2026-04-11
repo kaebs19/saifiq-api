@@ -36,7 +36,7 @@ const clientBuild = path.join(__dirname, 'client', 'dist');
 const fs = require('fs');
 if (process.env.NODE_ENV === 'production' && fs.existsSync(clientBuild)) {
   app.use(express.static(clientBuild));
-  app.get('*', (req, res, next) => {
+  app.get('{*path}', (req, res, next) => {
     if (req.path.startsWith('/api/') || req.path.startsWith('/uploads/') || req.path.startsWith('/socket.io/')) {
       return next();
     }
