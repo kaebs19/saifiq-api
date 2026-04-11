@@ -1,0 +1,8 @@
+node_modules/
+.env
+*.log
+*.p8
+firebase-service-account.json
+uploads/
+client/node_modules/
+client/dist/

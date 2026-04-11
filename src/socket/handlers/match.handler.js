@@ -1,0 +1,132 @@
+const matchEngine = require('../../services/matchEngine.service');
+const { MatchPlayer } = require('../../models');
+const { emitToUser } = require('../connectionManager');
+
+// Track which matches have started
+const startedMatches = new Set();
+const readyByMatch = new Map(); // matchId → Set<userId>
+
+const broadcastQuestion = async (io, matchId) => {
+  const data = await matchEngine.getCurrentQuestion(matchId);
+  if (!data) return;
+
+  io.to(`match:${matchId}`).emit('match:question', data);
+
+  // Auto-advance after timeout
+  setTimeout(async () => {
+    await advancePhase(io, matchId);
+  }, matchEngine.QUESTION_TIME_MS + 2000);
+};
+
+const advancePhase = async (io, matchId) => {
+  const result = await matchEngine.advanceQuestion(matchId);
+  if (!result) return;
+
+  if (result.done) {
+    const summary = await matchEngine.endMatch(matchId);
+    io.to(`match:${matchId}`).emit('match:ended', summary);
+    startedMatches.delete(matchId);
+    readyByMatch.delete(matchId);
+    return;
+  }
+
+  io.to(`match:${matchId}`).emit('match:question', {
+    question: result.question,
+    index: result.index,
+    total: result.total,
+  });
+
+  setTimeout(() => advancePhase(io, matchId), matchEngine.QUESTION_TIME_MS + 2000);
+};
+
+const registerMatchHandlers = (io, socket) => {
+  const userId = socket.user.id;
+
+  socket.on('match:join', async ({ matchId }, ack) => {
+    try {
+      const player = await MatchPlayer.findOne({ where: { matchId, userId } });
+      if (!player) {
+        ack?.({ ok: false, error: 'Not in this match' });
+        return;
+      }
+
+      socket.join(`match:${matchId}`);
+      ack?.({ ok: true });
+
+      // Track ready players
+      if (!readyByMatch.has(matchId)) readyByMatch.set(matchId, new Set());
+      readyByMatch.get(matchId).add(userId);
+
+      io.to(`match:${matchId}`).emit('match:player-joined', { userId });
+
+      // Check if all players ready
+      const totalPlayers = await MatchPlayer.count({ where: { matchId } });
+      if (readyByMatch.get(matchId).size >= totalPlayers && !startedMatches.has(matchId)) {
+        startedMatches.add(matchId);
+        await matchEngine.startMatch(matchId);
+        io.to(`match:${matchId}`).emit('match:started', { matchId });
+        setTimeout(() => broadcastQuestion(io, matchId), 1000);
+      }
+    } catch (err) {
+      ack?.({ ok: false, error: err.message });
+    }
+  });
+
+  socket.on('match:answer', async ({ matchId, answer, timeMs }, ack) => {
+    try {
+      const result = await matchEngine.submitAnswer(matchId, userId, answer, timeMs);
+      if (!result) {
+        ack?.({ ok: false, error: 'Cannot submit answer' });
+        return;
+      }
+      ack?.({ ok: true, correct: result.correct, points: result.points });
+
+      io.to(`match:${matchId}`).emit('match:answer-submitted', {
+        userId,
+        correct: result.correct,
+        scores: result.scores,
+        hp: result.hp,
+        attack: result.attack,
+        eliminated: result.eliminated,
+      });
+
+      if (result.attack?.damage > 0) {
+        io.to(`match:${matchId}`).emit('match:attack', {
+          attackerId: userId,
+          targetId: result.attack.targetId,
+          damage: result.attack.damage,
+          targetHp: result.attack.targetHp,
+        });
+      }
+
+      if (result.eliminated?.length) {
+        io.to(`match:${matchId}`).emit('match:eliminated', { eliminated: result.eliminated });
+      }
+
+      const state = await matchEngine.loadState(matchId);
+      if (state && matchEngine.allAnswered(state)) {
+        setTimeout(() => advancePhase(io, matchId), 1000);
+      }
+    } catch (err) {
+      ack?.({ ok: false, error: err.message });
+    }
+  });
+
+  socket.on('match:use-item', async ({ matchId, itemType }, ack) => {
+    try {
+      const result = await matchEngine.useItem(matchId, userId, itemType);
+      ack?.({ ok: true, ...result });
+
+      // Broadcast to the user only (personal effects) or room (public effects)
+      if (result.effect === 'shield_added') {
+        io.to(`match:${matchId}`).emit('match:item-used', { userId, itemType, effect: result.effect });
+      } else {
+        socket.emit('match:item-effect', result);
+      }
+    } catch (err) {
+      ack?.({ ok: false, error: err.message });
+    }
+  });
+};
+
+module.exports = { registerMatchHandlers };

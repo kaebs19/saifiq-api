@@ -1,0 +1,130 @@
+### SaifIQ Auth API — Test File
+### Usage: VSCode REST Client extension (humao.rest-client) or JetBrains HTTP Client
+### Click "Send Request" above each call.
+
+@baseUrl = http://localhost:5001/api/v1
+
+### Variables (edit freely)
+@email = player1@test.com
+@password = Test@123
+@username = player1
+@country = SA
+
+###############################################
+### 1. Register a new player
+POST {{baseUrl}}/auth/register
+Content-Type: application/json
+
+{
+  "username": "{{username}}",
+  "email": "{{email}}",
+  "password": "{{password}}",
+  "country": "{{country}}"
+}
+
+###############################################
+### 2. Login with email + password
+# @name login
+POST {{baseUrl}}/auth/login
+Content-Type: application/json
+
+{
+  "email": "{{email}}",
+  "password": "{{password}}"
+}
+
+### Save the token from the login response above
+@token = {{login.response.body.data.token}}
+
+###############################################
+### 3. Get current user info (requires token)
+GET {{baseUrl}}/auth/me
+Authorization: Bearer {{token}}
+
+###############################################
+### 4. Admin Login
+POST {{baseUrl}}/auth/admin-login
+Content-Type: application/json
+
+{
+  "email": "admin@saifiq.com",
+  "password": "Admin@123"
+}
+
+###############################################
+### 5. Forgot Password — request reset code
+POST {{baseUrl}}/auth/forgot-password
+Content-Type: application/json
+
+{
+  "email": "{{email}}"
+}
+
+### The code will be logged to the server console (dev mode).
+### Copy the 6-digit code and paste it below:
+@resetCode = 123456
+
+###############################################
+### 6. Verify reset code
+# @name verifyCode
+POST {{baseUrl}}/auth/verify-reset-code
+Content-Type: application/json
+
+{
+  "email": "{{email}}",
+  "code": "{{resetCode}}"
+}
+
+### Save the resetToken from the response above
+@resetToken = {{verifyCode.response.body.data.resetToken}}
+
+###############################################
+### 7. Reset password with new password
+POST {{baseUrl}}/auth/reset-password
+Content-Type: application/json
+
+{
+  "resetToken": "{{resetToken}}",
+  "newPassword": "NewPass@456"
+}
+
+###############################################
+### 8. Google Sign-In (needs a real idToken from iOS client)
+POST {{baseUrl}}/auth/google
+Content-Type: application/json
+
+{
+  "idToken": "PASTE_GOOGLE_ID_TOKEN_HERE"
+}
+
+###############################################
+### 9. Apple Sign-In (needs a real identityToken from iOS client)
+POST {{baseUrl}}/auth/apple
+Content-Type: application/json
+
+{
+  "identityToken": "PASTE_APPLE_IDENTITY_TOKEN_HERE",
+  "fullName": "Mohammed"
+}
+
+###############################################
+### 10. Error case: login with wrong password
+POST {{baseUrl}}/auth/login
+Content-Type: application/json
+
+{
+  "email": "{{email}}",
+  "password": "wrong_password"
+}
+
+###############################################
+### 11. Error case: register with duplicate email
+POST {{baseUrl}}/auth/register
+Content-Type: application/json
+
+{
+  "username": "another_user",
+  "email": "{{email}}",
+  "password": "Test@123",
+  "country": "SA"
+}
