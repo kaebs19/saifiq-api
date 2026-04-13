@@ -11,7 +11,7 @@ const { ROLES } = require('../config/constants');
 const googleClient = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
 
 const generateFriendCode = () => {
-  return crypto.randomBytes(3).toString('hex').toUpperCase(); // e.g. "A3F9K2"
+  return crypto.randomInt(100000, 999999).toString(); // e.g. "482951"
 };
 
 const appleJwksClient = jwksClient({
