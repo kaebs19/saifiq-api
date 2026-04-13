@@ -13,6 +13,7 @@ const spinRoutes = require('./spin.routes');
 const dailyRewardRoutes = require('./dailyReward.routes');
 const avatarRoutes = require('./avatar.routes');
 const friendRoutes = require('./friend.routes');
+const userStatsRoutes = require('./userStats.routes');
 
 const asyncHandler = require('../middleware/asyncHandler');
 const ApiResponse = require('../utils/ApiResponse');
@@ -34,6 +35,7 @@ router.use('/spin', spinRoutes);
 router.use('/daily-reward', dailyRewardRoutes);
 router.use('/avatars', avatarRoutes);
 router.use('/friends', friendRoutes);
+router.use('/user', userStatsRoutes);
 
 // Room info (public — for invite links)
 router.get('/rooms/:code', asyncHandler(async (req, res) => {
