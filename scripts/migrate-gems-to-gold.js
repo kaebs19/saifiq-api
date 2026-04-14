@@ -45,7 +45,7 @@ const migrate = async () => {
     }
 
     // 3. Reset gems to 0 (premium currency)
-    const [result] = await sequelize.query('UPDATE "Users" SET "gems" = 0 RETURNING COUNT(*)');
+    await sequelize.query('UPDATE "Users" SET "gems" = 0');
     console.log('✅ Users: gems reset to 0 (premium currency)');
 
     // 4. Add currency column to Transactions if not exists
