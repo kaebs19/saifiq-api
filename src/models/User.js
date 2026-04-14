@@ -45,7 +45,11 @@ const User = sequelize.define('User', {
   },
   gems: {
     type: DataTypes.INTEGER,
-    defaultValue: 10,
+    defaultValue: 0,
+  },
+  gold: {
+    type: DataTypes.INTEGER,
+    defaultValue: 500,
   },
   wins: {
     type: DataTypes.INTEGER,

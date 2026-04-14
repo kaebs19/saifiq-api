@@ -1,7 +1,7 @@
 require('dotenv').config();
 const { connectDB } = require('../src/config/db');
 const { Item } = require('../src/models');
-const { ITEM_TYPES, GEM_COSTS } = require('../src/config/constants');
+const { ITEM_TYPES, GOLD_COSTS } = require('../src/config/constants');
 
 const ITEM_DETAILS = {
   eliminate_two: { nameAr: '\u062D\u0630\u0641 \u0625\u062C\u0627\u0628\u062A\u064A\u0646', descriptionAr: '\u064A\u062D\u0630\u0641 \u062E\u064A\u0627\u0631\u064A\u0646 \u062E\u0627\u0637\u0626\u064A\u0646 \u0645\u0646 \u0633\u0624\u0627\u0644 MCQ' },
@@ -28,7 +28,7 @@ const seed = async () => {
         type,
         nameAr: details.nameAr,
         descriptionAr: details.descriptionAr,
-        gemCost: GEM_COSTS[type],
+        goldCost: GOLD_COSTS[type],
         isActive: true,
       });
       created++;

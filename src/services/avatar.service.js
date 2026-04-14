@@ -45,6 +45,7 @@ const selectAvatar = async (userId, avatarId) => {
       userId,
       amount: -avatar.gemCost,
       type: 'purchase',
+      currency: 'gems',
       description: `شراء صورة شخصية: ${avatar.name}`,
     }, { transaction: t });
   });

@@ -216,7 +216,7 @@ const appleLogin = async (identityToken, fullName) => {
 
 const getMe = async (userId) => {
   const user = await User.findByPk(userId, {
-    attributes: ['id', 'username', 'email', 'role', 'avatarUrl', 'level', 'gems', 'country', 'friendCode', 'createdAt'],
+    attributes: ['id', 'username', 'email', 'role', 'avatarUrl', 'level', 'gems', 'gold', 'country', 'friendCode', 'createdAt'],
   });
   if (!user) throw new AppError('\u0627\u0644\u0645\u0633\u062A\u062E\u062F\u0645 \u063A\u064A\u0631 \u0645\u0648\u062C\u0648\u062F', 404);
   return user;

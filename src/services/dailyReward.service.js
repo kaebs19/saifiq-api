@@ -11,13 +11,13 @@ const CLAIMED_KEY = (userId, date) => `daily:claimed:${userId}:${date}`;
 const DEFAULT_CONFIG = {
   enabled: true,
   rewards: [
-    { day: 1, type: 'gems', value: 5, label: '5 \u062C\u0648\u0627\u0647\u0631' },
-    { day: 2, type: 'gems', value: 10, label: '10 \u062C\u0648\u0627\u0647\u0631' },
-    { day: 3, type: 'gems', value: 15, label: '15 \u062C\u0648\u0647\u0631\u0629' },
-    { day: 4, type: 'item', value: 'shield', label: '\u062F\u0631\u0639 \u062D\u0645\u0627\u064A\u0629' },
-    { day: 5, type: 'gems', value: 25, label: '25 \u062C\u0648\u0647\u0631\u0629' },
-    { day: 6, type: 'gems', value: 30, label: '30 \u062C\u0648\u0647\u0631\u0629' },
-    { day: 7, type: 'gems', value: 50, label: '50 \u062C\u0648\u0647\u0631\u0629 + \u0623\u062F\u0627\u0629' },
+    { day: 1, type: 'gold', value: 5, label: '5 ذهب' },
+    { day: 2, type: 'gold', value: 10, label: '10 ذهب' },
+    { day: 3, type: 'gold', value: 15, label: '15 ذهب' },
+    { day: 4, type: 'item', value: 'shield', label: 'درع حماية' },
+    { day: 5, type: 'gold', value: 25, label: '25 ذهب' },
+    { day: 6, type: 'gold', value: 30, label: '30 ذهب' },
+    { day: 7, type: 'gold', value: 50, label: '50 ذهب + أداة' },
   ],
 };
 
@@ -103,17 +103,18 @@ const claim = async (userId) => {
 
 const applyReward = async (userId, reward) => {
   switch (reward.type) {
-    case 'gems':
+    case 'gold':
       await sequelize.transaction(async (t) => {
         await User.update(
-          { gems: sequelize.literal(`"gems" + ${reward.value}`) },
+          { gold: sequelize.literal(`"gold" + ${reward.value}`) },
           { where: { id: userId }, transaction: t }
         );
         await Transaction.create({
           userId,
           amount: reward.value,
           type: 'daily_bonus',
-          description: `\u0645\u0643\u0627\u0641\u0623\u0629 \u064A\u0648\u0645\u064A\u0629: ${reward.label}`,
+          currency: 'gold',
+          description: `مكافأة يومية: ${reward.label}`,
         }, { transaction: t });
       });
       break;

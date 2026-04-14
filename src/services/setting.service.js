@@ -1,8 +1,8 @@
 const { Setting } = require('../models');
-const { GEM_COSTS } = require('../config/constants');
+const { GOLD_COSTS } = require('../config/constants');
 
 const DEFAULTS = {
-  gem_costs: GEM_COSTS,
+  gold_costs: GOLD_COSTS,
 };
 
 const getAll = async () => {

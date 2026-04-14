@@ -20,7 +20,7 @@ const Item = sequelize.define('Item', {
     type: DataTypes.TEXT,
     allowNull: true,
   },
-  gemCost: {
+  goldCost: {
     type: DataTypes.INTEGER,
     allowNull: false,
   },

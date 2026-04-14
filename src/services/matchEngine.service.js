@@ -1,6 +1,6 @@
 const { Match, MatchPlayer, Question, User, UserItem, Transaction, sequelize } = require('../models');
 const { redis } = require('../config/redis');
-const { GEM_COSTS } = require('../config/constants');
+const { GOLD_COSTS } = require('../config/constants');
 
 const STATE_KEY = (matchId) => `match:${matchId}:state`;
 const QUESTIONS_PER_MATCH = 8;
@@ -247,17 +247,18 @@ const useItem = async (matchId, userId, itemType) => {
   if (!effect) throw new Error('\u0623\u062F\u0627\u0629 \u063A\u064A\u0631 \u0645\u062F\u0639\u0648\u0645\u0629');
 
   // Check + deduct cost in a transaction
-  const cost = GEM_COSTS[itemType];
+  const cost = GOLD_COSTS[itemType];
   if (!cost) throw new Error('Item has no cost');
 
   await sequelize.transaction(async (t) => {
     const user = await User.findByPk(userId, { transaction: t });
-    if (!user || user.gems < cost) throw new Error('\u0631\u0635\u064A\u062F \u063A\u064A\u0631 \u0643\u0627\u0641\u064A');
-    await user.update({ gems: user.gems - cost }, { transaction: t });
+    if (!user || user.gold < cost) throw new Error('\u0631\u0635\u064A\u062F \u063A\u064A\u0631 \u0643\u0627\u0641\u064A');
+    await user.update({ gold: user.gold - cost }, { transaction: t });
     await Transaction.create({
       userId,
       amount: -cost,
       type: 'item_use',
+      currency: 'gold',
       description: `\u0627\u0633\u062A\u062E\u062F\u0627\u0645 ${itemType}`,
       matchId,
     }, { transaction: t });
@@ -307,13 +308,14 @@ const endMatch = async (matchId) => {
         wins: isWinner ? sequelize.literal('"wins" + 1') : sequelize.col('wins'),
         losses: !isWinner ? sequelize.literal('"losses" + 1') : sequelize.col('losses'),
         totalPoints: sequelize.literal(`"totalPoints" + ${state.scores[userId]}`),
-        gems: sequelize.literal(`"gems" + ${reward}`),
+        gold: sequelize.literal(`"gold" + ${reward}`),
       }, { where: { id: userId }, transaction: t });
 
       await Transaction.create({
         userId,
         amount: reward,
         type: 'win_reward',
+        currency: 'gold',
         description: isWinner ? '\u0645\u0643\u0627\u0641\u0623\u0629 \u0641\u0648\u0632' : '\u0645\u0643\u0627\u0641\u0623\u0629 \u0645\u0634\u0627\u0631\u0643\u0629',
         matchId,
       }, { transaction: t });

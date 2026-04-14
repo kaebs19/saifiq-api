@@ -14,10 +14,10 @@ const DEFAULT_CONFIG = {
   extraSpinCost: 10,
   maxExtraSpinsPerDay: 3,
   slots: [
-    { type: 'gems', value: 5, weight: 30, color: '#3b82f6', label: '5 \u062C\u0648\u0627\u0647\u0631' },
-    { type: 'gems', value: 10, weight: 20, color: '#22c55e', label: '10 \u062C\u0648\u0627\u0647\u0631' },
-    { type: 'gems', value: 20, weight: 10, color: '#c9a84c', label: '20 \u062C\u0648\u0647\u0631\u0629' },
-    { type: 'gems', value: 50, weight: 3, color: '#ef4444', label: '50 \u062C\u0648\u0647\u0631\u0629' },
+    { type: 'gold', value: 5, weight: 30, color: '#3b82f6', label: '5 ذهب' },
+    { type: 'gold', value: 10, weight: 20, color: '#22c55e', label: '10 ذهب' },
+    { type: 'gold', value: 20, weight: 10, color: '#c9a84c', label: '20 ذهب' },
+    { type: 'gold', value: 50, weight: 3, color: '#ef4444', label: '50 ذهب' },
     { type: 'item', value: null, weight: 15, color: '#8b5cf6', label: '\u0623\u062F\u0627\u0629 \u0639\u0634\u0648\u0627\u0626\u064A\u0629' },
     { type: 'points', value: 50, weight: 12, color: '#f97316', label: '50 \u0646\u0642\u0637\u0629' },
     { type: 'extra_spin', value: 1, weight: 5, color: '#e0e0e0', label: '\u062F\u0648\u0631\u0629 \u0625\u0636\u0627\u0641\u064A\u0629' },
@@ -95,13 +95,13 @@ const spin = async (userId, useExtra = false) => {
     }
 
     const user = await User.findByPk(userId);
-    if (user.gems < config.extraSpinCost) {
-      throw new AppError('\u0631\u0635\u064A\u062F \u0627\u0644\u062C\u0648\u0627\u0647\u0631 \u063A\u064A\u0631 \u0643\u0627\u0641\u064A', 400);
+    if (user.gold < config.extraSpinCost) {
+      throw new AppError('رصيد الذهب غير كافي', 400);
     }
 
     await sequelize.transaction(async (t) => {
-      await User.update({ gems: sequelize.literal(`"gems" - ${config.extraSpinCost}`) }, { where: { id: userId }, transaction: t });
-      await Transaction.create({ userId, amount: -config.extraSpinCost, type: 'item_use', description: '\u062F\u0648\u0631\u0629 \u0625\u0636\u0627\u0641\u064A\u0629 \u0641\u064A \u0627\u0644\u0635\u062D\u0646' }, { transaction: t });
+      await User.update({ gold: sequelize.literal(`"gold" - ${config.extraSpinCost}`) }, { where: { id: userId }, transaction: t });
+      await Transaction.create({ userId, amount: -config.extraSpinCost, type: 'item_use', currency: 'gold', description: 'دورة إضافية في الصحن' }, { transaction: t });
     });
 
     await redis.incr(EXTRA_KEY(userId, todayKey()));
@@ -125,10 +125,10 @@ const spin = async (userId, useExtra = false) => {
 
 const applyReward = async (userId, slot) => {
   switch (slot.type) {
-    case 'gems':
+    case 'gold':
       await sequelize.transaction(async (t) => {
-        await User.update({ gems: sequelize.literal(`"gems" + ${slot.value}`) }, { where: { id: userId }, transaction: t });
-        await Transaction.create({ userId, amount: slot.value, type: 'daily_bonus', description: `\u0627\u0644\u0635\u062D\u0646 \u0627\u0644\u064A\u0648\u0645\u064A: ${slot.label}` }, { transaction: t });
+        await User.update({ gold: sequelize.literal(`"gold" + ${slot.value}`) }, { where: { id: userId }, transaction: t });
+        await Transaction.create({ userId, amount: slot.value, type: 'daily_bonus', currency: 'gold', description: `الصحن اليومي: ${slot.label}` }, { transaction: t });
       });
       break;
 

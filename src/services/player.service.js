@@ -6,7 +6,7 @@ const { ROLES } = require('../config/constants');
 
 const PLAYER_ATTRS = [
   'id', 'username', 'email', 'avatarUrl', 'country',
-  'level', 'gems', 'wins', 'losses', 'totalPoints', 'weeklyPoints',
+  'level', 'gems', 'gold', 'wins', 'losses', 'totalPoints', 'weeklyPoints',
   'isBanned', 'role', 'createdAt',
 ];
 

@@ -40,7 +40,7 @@ const ROUNDS = {
   FINAL: 3,
 };
 
-const GEM_COSTS = {
+const GOLD_COSTS = {
   eliminate_two: 50,
   hint: 30,
   freeze_time: 60,
@@ -90,7 +90,7 @@ module.exports = {
   QUESTION_TYPES,
   ITEM_TYPES,
   ROUNDS,
-  GEM_COSTS,
+  GOLD_COSTS,
   ROLES,
   NOTIFICATION_TYPES,
   DIFFICULTY_CONFIG,

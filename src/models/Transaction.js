@@ -19,6 +19,10 @@ const Transaction = sequelize.define('Transaction', {
     type: DataTypes.ENUM('purchase', 'win_reward', 'daily_bonus', 'item_use', 'refund'),
     allowNull: false,
   },
+  currency: {
+    type: DataTypes.ENUM('gold', 'gems'),
+    defaultValue: 'gold',
+  },
   description: {
     type: DataTypes.STRING,
     allowNull: true,

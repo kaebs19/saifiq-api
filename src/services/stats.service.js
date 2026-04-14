@@ -50,7 +50,7 @@ const getOverview = async () => {
 const getTopPlayers = async (limit = 10) => {
   return User.findAll({
     where: { role: ROLES.PLAYER, isBanned: false },
-    attributes: ['id', 'username', 'avatarUrl', 'country', 'level', 'gems', 'wins', 'losses', 'totalPoints'],
+    attributes: ['id', 'username', 'avatarUrl', 'country', 'level', 'gems', 'gold', 'wins', 'losses', 'totalPoints'],
     order: [['totalPoints', 'DESC'], ['wins', 'DESC']],
     limit,
   });
