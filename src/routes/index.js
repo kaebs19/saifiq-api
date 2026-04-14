@@ -16,6 +16,7 @@ const friendRoutes = require('./friend.routes');
 const userStatsRoutes = require('./userStats.routes');
 const playerStoreRoutes = require('./playerStore.routes');
 const leaderboardRoutes = require('./leaderboard.routes');
+const clanRoutes = require('./clan.routes');
 
 const asyncHandler = require('../middleware/asyncHandler');
 const ApiResponse = require('../utils/ApiResponse');
@@ -40,6 +41,7 @@ router.use('/friends', friendRoutes);
 router.use('/user', userStatsRoutes);
 router.use('/store', playerStoreRoutes);
 router.use('/leaderboard', leaderboardRoutes);
+router.use('/clans', clanRoutes);
 
 // Room info (public — for invite links)
 router.get('/rooms/:code', asyncHandler(async (req, res) => {

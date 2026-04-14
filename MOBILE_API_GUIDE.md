@@ -163,3 +163,127 @@ All transactions now include a `currency` field:
 ```
 
 Values: `"gold"` or `"gems"`
+
+---
+
+## Clans (العشائر)
+
+تكلفة إنشاء عشيرة: **500 ذهب**. كل لاعب يمكنه الانضمام لعشيرة واحدة فقط.
+
+### Roles
+- `owner` — زعيم (كل الصلاحيات)
+- `admin` — مشرف (قبول/رفض/طرد)
+- `member` — عضو
+
+### Levels
+| Level | Points | Max Members |
+|-------|--------|-------------|
+| 1 | 0 | 30 |
+| 2 | 5,000 | 40 |
+| 3 | 15,000 | 50 |
+
+---
+
+### POST /clans
+Create a clan (costs 500 gold).
+```json
+// Request
+{ "name": "الصقور", "description": "أقوى عشيرة", "badge": "eagle", "color": "#FFD700" }
+
+// Response
+{ "success": true, "data": { "id": "uuid", "name": "الصقور", ... } }
+```
+
+### GET /clans/search?q=الصقور
+Search clans by name. Paginated.
+
+### GET /clans/my
+Get my clan details + `myRole`.
+
+### GET /clans/:id
+Get clan details + `memberCount`.
+
+### PATCH /clans/:id
+Update clan (owner/admin). Body: `{ name, description, badge, color, isOpen }`
+
+### DELETE /clans/:id
+Delete clan (owner only).
+
+---
+
+### POST /clans/:id/join
+Join or request to join. Returns `{ status: "joined" }` if open, `{ status: "pending" }` if closed.
+
+### POST /clans/:id/leave
+Leave clan (owner must transfer first).
+
+### GET /clans/:id/members
+Paginated member list with `role`, `weeklyPoints`, `isOnline`.
+
+### POST /clans/:id/members/:uid/kick
+Kick a member (admin/owner).
+
+### POST /clans/:id/members/:uid/promote
+Promote member to admin (owner only).
+
+### POST /clans/:id/members/:uid/demote
+Demote admin to member (owner only).
+
+### POST /clans/:id/transfer/:uid
+Transfer ownership to another member (owner only).
+
+---
+
+### GET /clans/:id/requests
+Pending join requests (admin/owner).
+
+### POST /clans/:id/requests/:rid/accept
+Accept a join request.
+
+### POST /clans/:id/requests/:rid/reject
+Reject a join request.
+
+---
+
+### GET /clans/:id/chat
+Paginated messages (newest first).
+```json
+{
+  "data": [
+    { "id": "uuid", "type": "text", "content": "مرحبا", "isPinned": false, "User": { "id": "uuid", "username": "player1", "avatarUrl": "..." }, "createdAt": "..." },
+    { "id": "uuid", "type": "game_code", "content": "player1 يدعوكم للعب!", "roomCode": "ABC123", "User": { ... }, "createdAt": "..." },
+    { "id": "uuid", "type": "system", "content": "player2 انضم للعشيرة", "User": { ... }, "createdAt": "..." }
+  ]
+}
+```
+
+### POST /clans/:id/chat
+Send message. Body: `{ "content": "مرحبا", "type": "text" }`
+Type `announcement` requires admin/owner role.
+
+### POST /clans/:id/chat/game-code
+Send game invite. Body: `{ "roomCode": "ABC123" }`
+
+### POST /clans/:id/chat/:mid/pin
+Toggle pin on a message (admin/owner).
+
+---
+
+### GET /clans/leaderboard
+Top clans ranked by `weeklyPoints`.
+```json
+{
+  "data": [
+    { "rank": 1, "id": "uuid", "name": "الصقور", "badge": "eagle", "color": "#FFD700", "level": 3, "weeklyPoints": 5000, "memberCount": 45 }
+  ]
+}
+```
+
+### GET /clans/:id/leaderboard
+Members ranked by `weeklyPoints` within a clan.
+```json
+{
+  "data": [
+    { "rank": 1, "id": "uuid", "username": "player1", "avatarUrl": "...", "role": "owner", "weeklyPoints": 500 }
+  ]
+}

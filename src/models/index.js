@@ -12,6 +12,10 @@ const Notification = require('./Notification');
 const Setting = require('./Setting');
 const Avatar = require('./Avatar');
 const Friendship = require('./Friendship');
+const Clan = require('./Clan');
+const ClanMember = require('./ClanMember');
+const ClanMessage = require('./ClanMessage');
+const ClanRequest = require('./ClanRequest');
 
 // ── User associations ──
 User.hasMany(MatchPlayer, { foreignKey: 'userId' });
@@ -53,6 +57,18 @@ Notification.belongsTo(User, { foreignKey: 'userId' });
 Friendship.belongsTo(User, { as: 'requester', foreignKey: 'requesterId' });
 Friendship.belongsTo(User, { as: 'addressee', foreignKey: 'addresseeId' });
 
+// ── Clan associations ──
+Clan.belongsTo(User, { as: 'owner', foreignKey: 'ownerId' });
+Clan.hasMany(ClanMember, { foreignKey: 'clanId' });
+Clan.hasMany(ClanMessage, { foreignKey: 'clanId' });
+Clan.hasMany(ClanRequest, { foreignKey: 'clanId' });
+ClanMember.belongsTo(User, { foreignKey: 'userId' });
+ClanMember.belongsTo(Clan, { foreignKey: 'clanId' });
+ClanMessage.belongsTo(User, { foreignKey: 'userId' });
+ClanRequest.belongsTo(User, { foreignKey: 'userId' });
+ClanRequest.belongsTo(Clan, { foreignKey: 'clanId' });
+User.hasOne(ClanMember, { foreignKey: 'userId' });
+
 module.exports = {
   User,
   Question,
@@ -67,5 +83,9 @@ module.exports = {
   Setting,
   Avatar,
   Friendship,
+  Clan,
+  ClanMember,
+  ClanMessage,
+  ClanRequest,
   sequelize,
 };
