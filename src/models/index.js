@@ -16,6 +16,7 @@ const Clan = require('./Clan');
 const ClanMember = require('./ClanMember');
 const ClanMessage = require('./ClanMessage');
 const ClanRequest = require('./ClanRequest');
+const IapTransaction = require('./IapTransaction');
 
 // ── User associations ──
 User.hasMany(MatchPlayer, { foreignKey: 'userId' });
@@ -69,6 +70,10 @@ ClanRequest.belongsTo(User, { foreignKey: 'userId' });
 ClanRequest.belongsTo(Clan, { foreignKey: 'clanId' });
 User.hasOne(ClanMember, { foreignKey: 'userId' });
 
+// ── IAP associations ──
+IapTransaction.belongsTo(User, { foreignKey: 'userId' });
+User.hasMany(IapTransaction, { foreignKey: 'userId' });
+
 module.exports = {
   User,
   Question,
@@ -87,5 +92,6 @@ module.exports = {
   ClanMember,
   ClanMessage,
   ClanRequest,
+  IapTransaction,
   sequelize,
 };

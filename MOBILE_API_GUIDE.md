@@ -287,3 +287,49 @@ Members ranked by `weeklyPoints` within a clan.
     { "rank": 1, "id": "uuid", "username": "player1", "avatarUrl": "...", "role": "owner", "weeklyPoints": 500 }
   ]
 }
+```
+
+---
+
+## IAP (In-App Purchases)
+
+### GET /iap/packages
+List available gem packages.
+```json
+{
+  "data": [
+    { "productId": "com.saifiq.gems.50",   "gems": 50,   "gold": 0 },
+    { "productId": "com.saifiq.gems.300",  "gems": 300,  "gold": 0 },
+    { "productId": "com.saifiq.gems.700",  "gems": 700,  "gold": 0 },
+    { "productId": "com.saifiq.gems.1500", "gems": 1500, "gold": 200 },
+    { "productId": "com.saifiq.gems.5000", "gems": 5000, "gold": 1000 }
+  ]
+}
+```
+
+### POST /iap/verify
+Verify purchase and add gems to account.
+```json
+// Request
+{ "productId": "com.saifiq.gems.300", "transactionId": "2000000123456789" }
+
+// Response
+{
+  "success": true,
+  "message": "تم الشراء بنجاح",
+  "data": {
+    "gemsAdded": 300,
+    "goldAdded": 0,
+    "newGems": 350,
+    "newGold": 500
+  }
+}
+```
+
+Errors:
+- `400` — unknown productId
+- `409` — transactionId already used (duplicate)
+
+### POST /iap/apple-notifications
+Apple App Store Server Notifications V2 webhook (public, no auth).
+Handles `REFUND` events → automatically deducts gems/gold from user.
