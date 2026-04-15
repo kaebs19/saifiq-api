@@ -3,10 +3,12 @@ import PageHeader from '../../components/ui/PageHeader';
 import Tabs from '../../components/ui/Tabs';
 import ItemsTab from './ItemsTab';
 import TransactionsTab from './TransactionsTab';
+import IapTab from './IapTab';
 
 const TABS = [
-  { id: 'items', label: '\u0627\u0644\u0623\u062F\u0648\u0627\u062A' },
-  { id: 'transactions', label: '\u0633\u062C\u0644 \u0627\u0644\u0645\u0639\u0627\u0645\u0644\u0627\u062A' },
+  { id: 'items', label: 'الأدوات (بالذهب)' },
+  { id: 'iap', label: 'باقات الجواهر' },
+  { id: 'transactions', label: 'سجل المعاملات' },
 ];
 
 export default function StorePage() {
@@ -14,9 +16,10 @@ export default function StorePage() {
 
   return (
     <div>
-      <PageHeader title={'\u0627\u0644\u0645\u062A\u062C\u0631'} />
+      <PageHeader title="المتجر" />
       <Tabs tabs={TABS} active={tab} onChange={setTab} />
       {tab === 'items' && <ItemsTab />}
+      {tab === 'iap' && <IapTab />}
       {tab === 'transactions' && <TransactionsTab />}
     </div>
   );

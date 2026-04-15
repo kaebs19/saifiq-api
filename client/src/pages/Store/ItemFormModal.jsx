@@ -6,14 +6,14 @@ import Input from '../../components/ui/Input';
 import Textarea from '../../components/ui/Textarea';
 
 export default function ItemFormModal({ item, onClose, onSave, loading }) {
-  const [form, setForm] = useState({ nameAr: '', descriptionAr: '', gemCost: 0 });
+  const [form, setForm] = useState({ nameAr: '', descriptionAr: '', goldCost: 0 });
 
   useEffect(() => {
     if (item) {
       setForm({
         nameAr: item.nameAr || '',
         descriptionAr: item.descriptionAr || '',
-        gemCost: item.gemCost || 0,
+        goldCost: item.goldCost || 0,
       });
     }
   }, [item]);
@@ -22,7 +22,7 @@ export default function ItemFormModal({ item, onClose, onSave, loading }) {
 
   const handleSave = () => {
     if (!item) return;
-    onSave({ id: item.id, data: { ...form, gemCost: Number(form.gemCost) } });
+    onSave({ id: item.id, data: { ...form, goldCost: Number(form.goldCost) } });
   };
 
   return (
@@ -56,10 +56,10 @@ export default function ItemFormModal({ item, onClose, onSave, loading }) {
             rows={3}
           />
           <Input
-            label={'\u0633\u0639\u0631 \u0627\u0644\u062C\u0648\u0627\u0647\u0631'}
+            label={'سعر الذهب'}
             type="number"
-            value={form.gemCost}
-            onChange={(e) => set('gemCost', e.target.value)}
+            value={form.goldCost}
+            onChange={(e) => set('goldCost', e.target.value)}
             min={0}
           />
         </div>

@@ -5,24 +5,28 @@ import Icon from './icons/Icon';
 import { colors, radii, spacing, font, transitions } from '../lib/theme';
 
 const NAV_ITEMS = [
-  { path: '/dashboard', label: '\u0627\u0644\u0631\u0626\u064A\u0633\u064A\u0629', icon: 'home', exact: true },
-  { path: '/dashboard/questions', label: '\u0627\u0644\u0623\u0633\u0626\u0644\u0629', icon: 'question' },
-  { path: '/dashboard/players', label: '\u0627\u0644\u0644\u0627\u0639\u0628\u0648\u0646', icon: 'users' },
-  { path: '/dashboard/matches', label: '\u0627\u0644\u0645\u0628\u0627\u0631\u064A\u0627\u062A', icon: 'trophy' },
-  { path: '/dashboard/store', label: '\u0627\u0644\u0645\u062A\u062C\u0631', icon: 'gem' },
-  { path: '/dashboard/notifications', label: '\u0627\u0644\u0625\u0634\u0639\u0627\u0631\u0627\u062A', icon: 'bell' },
-  { path: '/dashboard/settings', label: '\u0627\u0644\u0625\u0639\u062F\u0627\u062F\u0627\u062A', icon: 'settings' },
+  { path: '/dashboard', label: 'الرئيسية', icon: 'home', exact: true },
+  { path: '/dashboard/questions', label: 'الأسئلة', icon: 'question' },
+  { path: '/dashboard/players', label: 'اللاعبون', icon: 'users' },
+  { path: '/dashboard/matches', label: 'المباريات', icon: 'trophy' },
+  { path: '/dashboard/store', label: 'المتجر', icon: 'gem' },
+  { path: '/dashboard/currency', label: 'إدارة العملات', icon: 'coin' },
+  { path: '/dashboard/clans', label: 'العشائر', icon: 'shield' },
+  { path: '/dashboard/notifications', label: 'الإشعارات', icon: 'bell' },
+  { path: '/dashboard/settings', label: 'الإعدادات', icon: 'settings' },
 ];
 
 const PAGE_TITLES = {
-  '/dashboard': '\u0627\u0644\u0631\u0626\u064A\u0633\u064A\u0629',
-  '/dashboard/questions': '\u0627\u0644\u0623\u0633\u0626\u0644\u0629',
-  '/dashboard/players': '\u0627\u0644\u0644\u0627\u0639\u0628\u0648\u0646',
-  '/dashboard/matches': '\u0627\u0644\u0645\u0628\u0627\u0631\u064A\u0627\u062A',
-  '/dashboard/store': '\u0627\u0644\u0645\u062A\u062C\u0631',
-  '/dashboard/notifications': '\u0627\u0644\u0625\u0634\u0639\u0627\u0631\u0627\u062A',
-  '/dashboard/settings': '\u0627\u0644\u0625\u0639\u062F\u0627\u062F\u0627\u062A',
-  '/dashboard/profile': '\u0627\u0644\u0645\u0644\u0641 \u0627\u0644\u0634\u062E\u0635\u064A',
+  '/dashboard': 'الرئيسية',
+  '/dashboard/questions': 'الأسئلة',
+  '/dashboard/players': 'اللاعبون',
+  '/dashboard/matches': 'المباريات',
+  '/dashboard/store': 'المتجر',
+  '/dashboard/currency': 'إدارة العملات',
+  '/dashboard/clans': 'العشائر',
+  '/dashboard/notifications': 'الإشعارات',
+  '/dashboard/settings': 'الإعدادات',
+  '/dashboard/profile': 'الملف الشخصي',
 };
 
 function getPageTitle(pathname) {

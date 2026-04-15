@@ -29,6 +29,11 @@ export default function PlayersTable({ data, loading, onEditGems, onToggleBan })
     { key: 'country', header: '\u0627\u0644\u062F\u0648\u0644\u0629', render: (row) => row.country || '-' },
     { key: 'level', header: '\u0627\u0644\u0645\u0633\u062A\u0648\u0649', render: (row) => <Badge variant="info">{row.level}</Badge> },
     {
+      key: 'gold',
+      header: '\u0627\u0644\u0630\u0647\u0628',
+      render: (row) => <span style={{ color: colors.warning, fontWeight: font.weights.bold }}>{row.gold ?? 0}</span>,
+    },
+    {
       key: 'gems',
       header: '\u0627\u0644\u062C\u0648\u0627\u0647\u0631',
       render: (row) => <span style={{ color: colors.gold, fontWeight: font.weights.bold }}>{row.gems}</span>,

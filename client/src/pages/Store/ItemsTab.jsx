@@ -28,17 +28,17 @@ export default function ItemsTab() {
           <Card key={item.id} style={{ opacity: item.isActive ? 1 : 0.5 }}>
             <div style={styles.header}>
               <div style={styles.iconWrap}>
-                <Icon name="gem" size={22} color={colors.gold} />
+                <Icon name="coin" size={22} color={colors.warning} />
               </div>
               <Badge variant={item.isActive ? 'success' : 'neutral'}>
-                {item.isActive ? '\u0645\u0641\u0639\u0644' : '\u0645\u0639\u0637\u0644'}
+                {item.isActive ? 'مفعل' : 'معطل'}
               </Badge>
             </div>
             <h3 style={styles.name}>{item.nameAr}</h3>
             <p style={styles.desc}>{item.descriptionAr}</p>
             <div style={styles.priceRow}>
-              <span style={styles.priceLabel}>{'\u0627\u0644\u0633\u0639\u0631'}</span>
-              <span style={styles.price}>{item.gemCost} 💎</span>
+              <span style={styles.priceLabel}>السعر</span>
+              <span style={styles.price}>{item.goldCost} 🪙</span>
             </div>
             <div style={styles.actions}>
               <Button size="sm" variant="gold" iconLeft="edit" onClick={() => setEditing(item)} fullWidth>
