@@ -333,3 +333,82 @@ Errors:
 ### POST /iap/apple-notifications
 Apple App Store Server Notifications V2 webhook (public, no auth).
 Handles `REFUND` events → automatically deducts gems/gold from user.
+
+---
+
+## Admin Currency (Admin-only)
+
+All endpoints require `role: "admin"`. Returns 403 otherwise.
+
+### GET /admin/users/search?q=<query>&limit=20
+Search by `username`, `email`, or `friendCode`.
+```json
+{
+  "success": true,
+  "data": [
+    { "id": "uuid", "username": "player1", "email": "a@b.com", "friendCode": "482951", "avatarUrl": "...", "gold": 120, "gems": 0, "level": 3, "role": "player" }
+  ]
+}
+```
+
+### POST /admin/users/:userId/grant
+Grant or deduct currency.
+```json
+// Request
+{ "currency": "gold", "amount": 500, "reason": "دعم فني" }
+
+// Response
+{
+  "success": true,
+  "message": "تمت إضافة 500 ذهب",
+  "data": { "userId": "uuid", "currency": "gold", "amount": 500, "newBalance": 620 }
+}
+```
+
+Errors:
+- `400` — invalid currency, amount is 0, or would result in negative balance
+- `404` — userId not found
+- `403` — not admin
+
+### GET /admin/audit?userId=<uuid>&limit=50
+Audit log of admin actions.
+
+---
+
+## Clan Real-time (Socket.io)
+
+### Client → Server
+| Event | Payload |
+|-------|---------|
+| `clan:join`   | `{ clanId }` — joins room after member check |
+| `clan:leave`  | `{ clanId }` — leaves the room |
+| `clan:typing` | `{ clanId }` — throttled to 1/2s on iOS |
+
+### Server → Client (broadcast to `clan:<clanId>` room)
+- `clan:message` — `{ clanId, message: { id, type, content, isPinned, roomCode, User, createdAt } }`
+- `clan:member-joined` — `{ clanId, user: { id, username, avatarUrl } }`
+- `clan:member-left` — `{ clanId, userId }`
+- `clan:member-role-changed` — `{ clanId, userId, newRole }`
+- `clan:typing` — `{ clanId, userId, username }` (excludes sender)
+- `clan:updated` — `{ clanId }` — re-fetch clan details via REST
+
+---
+
+## Clan Chat Pagination
+
+### GET /clans/:id/chat?limit=30&before=<messageId>
+Cursor-based pagination. Default limit 30, max 100.
+
+```json
+{
+  "success": true,
+  "data": {
+    "messages": [ ... ],
+    "limit": 30,
+    "hasMore": true,
+    "nextBefore": "message-uuid"
+  }
+}
+```
+
+Pass `nextBefore` as the next `before` to load older messages.

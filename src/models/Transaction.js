@@ -16,7 +16,7 @@ const Transaction = sequelize.define('Transaction', {
     allowNull: false,
   },
   type: {
-    type: DataTypes.ENUM('purchase', 'win_reward', 'daily_bonus', 'item_use', 'refund'),
+    type: DataTypes.ENUM('purchase', 'win_reward', 'daily_bonus', 'item_use', 'refund', 'admin_grant', 'iap'),
     allowNull: false,
   },
   currency: {

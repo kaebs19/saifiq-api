@@ -3,6 +3,7 @@ const { setIo, registerUser, removeUser, getOnlineCount } = require('./connectio
 const { registerQueueHandlers } = require('./handlers/queue.handler');
 const { registerMatchHandlers } = require('./handlers/match.handler');
 const { registerRoomHandlers } = require('./handlers/room.handler');
+const { registerClanHandlers } = require('./handlers/clan.handler');
 
 const initSocketServer = (io) => {
   setIo(io);
@@ -18,6 +19,7 @@ const initSocketServer = (io) => {
     registerQueueHandlers(io, socket);
     registerMatchHandlers(io, socket);
     registerRoomHandlers(io, socket);
+    registerClanHandlers(io, socket);
 
     socket.on('disconnect', () => {
       removeUser(userId, socket.id);

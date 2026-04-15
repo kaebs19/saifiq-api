@@ -60,7 +60,7 @@ const verifyPurchase = async (userId, { productId, transactionId }) => {
       await Transaction.create({
         userId,
         amount: pkg.gems,
-        type: 'purchase',
+        type: 'iap',
         currency: 'gems',
         description: `شراء ${productId}`,
       }, { transaction: t });
@@ -70,7 +70,7 @@ const verifyPurchase = async (userId, { productId, transactionId }) => {
       await Transaction.create({
         userId,
         amount: pkg.gold,
-        type: 'purchase',
+        type: 'iap',
         currency: 'gold',
         description: `مكافأة ذهب من شراء ${productId}`,
       }, { transaction: t });

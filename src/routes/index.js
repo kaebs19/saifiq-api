@@ -18,6 +18,7 @@ const playerStoreRoutes = require('./playerStore.routes');
 const leaderboardRoutes = require('./leaderboard.routes');
 const clanRoutes = require('./clan.routes');
 const iapRoutes = require('./iap.routes');
+const adminUserRoutes = require('./adminUser.routes');
 
 const asyncHandler = require('../middleware/asyncHandler');
 const ApiResponse = require('../utils/ApiResponse');
@@ -34,6 +35,7 @@ router.use('/admin/stats', statsRoutes);
 router.use('/admin/store', storeRoutes);
 router.use('/admin/settings', settingRoutes);
 router.use('/admin/matches', matchRoutes);
+router.use('/admin', adminUserRoutes);
 router.use('/content', contentRoutes);
 router.use('/spin', spinRoutes);
 router.use('/daily-reward', dailyRewardRoutes);

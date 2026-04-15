@@ -67,7 +67,26 @@
       "Bash(ls /Users/mohammedsaleh/saifiq-api/client/.env*)",
       "Bash(git init:*)",
       "Bash(git branch:*)",
-      "Bash(git add:*)"
+      "Bash(git add:*)",
+      "Bash(rm -f /Users/mohammedsaleh/saifiq-api/.git/index.lock)",
+      "Bash(git commit -m ':*)",
+      "Bash(git commit -m 'Initial commit — SaifIQ API + Admin Dashboard:*)",
+      "Bash(git remote:*)",
+      "Bash(git push:*)",
+      "Bash(xargs dirname:*)",
+      "Bash(ls -la /Users/mohammedsaleh/saifiq-api/client/.env*)",
+      "Bash(cp /Users/mohammedsaleh/Downloads/Avatar/Avatar.png /Users/mohammedsaleh/saifiq-api/uploads/avatars/defaults/avatar-01.png)",
+      "Bash(cp /Users/mohammedsaleh/Downloads/Avatar/Avatar1.png /Users/mohammedsaleh/saifiq-api/uploads/avatars/defaults/avatar-02.png)",
+      "Bash(cp /Users/mohammedsaleh/Downloads/Avatar/Avatar02.png /Users/mohammedsaleh/saifiq-api/uploads/avatars/defaults/avatar-03.png)",
+      "Bash(cp /Users/mohammedsaleh/Downloads/Avatar/Avatar03.png /Users/mohammedsaleh/saifiq-api/uploads/avatars/defaults/avatar-04.png)",
+      "Bash(cp /Users/mohammedsaleh/Downloads/Avatar/Avatar04.png /Users/mohammedsaleh/saifiq-api/uploads/avatars/defaults/avatar-05.png)",
+      "Bash(ssh contabo:*)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" https://saifiq.halmanhaj.com/)",
+      "Bash(curl -s https://saifiq.halmanhaj.com/)",
+      "Bash(curl -s https://saifiq.halmanhaj.com/api/v1/auth/me -H \"Authorization: Bearer test\" -w \"\\\\n%{http_code}\")",
+      "Bash(curl -s https://saifiq.halmanhaj.com/api/v1/avatars -H \"Content-Type: application/json\")",
+      "Bash(grep -n \"purchase\\\\|buy\\\\|shop\" /Users/mohammedsaleh/saifiq-api/src/controllers/*.js)",
+      "Bash(find /Users/mohammedsaleh/saifiq-api/src -name \"*.js\" -type f -exec grep -l \"weeklyPoints\\\\|totalPoints\" {} \\\\;)"
     ]
   }
 }

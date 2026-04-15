@@ -1,8 +1,13 @@
 const { Op } = require('sequelize');
 const { Clan, ClanMember, ClanMessage, ClanRequest, User, Transaction, sequelize } = require('../models');
-const { isOnline } = require('../socket/connectionManager');
+const { isOnline, getIo } = require('../socket/connectionManager');
 const AppError = require('../utils/AppError');
 const { getPagination, getPageMeta } = require('../utils/pagination');
+
+const emitToClan = (clanId, event, payload) => {
+  const io = getIo();
+  if (io) io.to(`clan:${clanId}`).emit(event, payload);
+};
 
 const MEMBER_ATTRS = ['id', 'username', 'avatarUrl', 'country', 'level'];
 
@@ -89,6 +94,7 @@ const updateClan = async (userId, clanId, data) => {
   }
 
   await clan.update(patch);
+  emitToClan(clanId, 'clan:updated', { clanId });
   return clan;
 };
 
@@ -147,8 +153,9 @@ const joinClan = async (userId, clanId) => {
 
   if (clan.isOpen) {
     await ClanMember.create({ clanId, userId, role: 'member' });
-    const user = await User.findByPk(userId, { attributes: ['username'] });
+    const user = await User.findByPk(userId, { attributes: ['id', 'username', 'avatarUrl'] });
     await ClanMessage.create({ clanId, userId, type: 'system', content: `${user.username} انضم للعشيرة` });
+    emitToClan(clanId, 'clan:member-joined', { clanId, user: user.toJSON() });
     return { status: 'joined' };
   }
 
@@ -166,6 +173,7 @@ const leaveClan = async (userId, clanId) => {
   await member.destroy();
   const user = await User.findByPk(userId, { attributes: ['username'] });
   await ClanMessage.create({ clanId, userId, type: 'system', content: `${user.username} غادر العشيرة` });
+  emitToClan(clanId, 'clan:member-left', { clanId, userId });
 };
 
 const kickMember = async (userId, clanId, targetId) => {
@@ -178,6 +186,7 @@ const kickMember = async (userId, clanId, targetId) => {
   await target.destroy();
   const user = await User.findByPk(targetId, { attributes: ['username'] });
   await ClanMessage.create({ clanId, userId, type: 'system', content: `${user.username} تم طرده من العشيرة` });
+  emitToClan(clanId, 'clan:member-left', { clanId, userId: targetId });
 };
 
 const promoteMember = async (userId, clanId, targetId) => {
@@ -185,6 +194,7 @@ const promoteMember = async (userId, clanId, targetId) => {
   const target = await assertMember(targetId, clanId);
   if (target.role !== 'member') throw new AppError('يمكن ترقية الأعضاء فقط', 400);
   await target.update({ role: 'admin' });
+  emitToClan(clanId, 'clan:member-role-changed', { clanId, userId: targetId, newRole: 'admin' });
 };
 
 const demoteMember = async (userId, clanId, targetId) => {
@@ -192,6 +202,7 @@ const demoteMember = async (userId, clanId, targetId) => {
   const target = await assertMember(targetId, clanId);
   if (target.role !== 'admin') throw new AppError('يمكن تنزيل المشرفين فقط', 400);
   await target.update({ role: 'member' });
+  emitToClan(clanId, 'clan:member-role-changed', { clanId, userId: targetId, newRole: 'member' });
 };
 
 const transferOwnership = async (userId, clanId, targetId) => {
@@ -228,8 +239,9 @@ const acceptRequest = async (userId, clanId, requestId) => {
     await ClanMember.create({ clanId, userId: request.userId, role: 'member' }, { transaction: t });
   });
 
-  const user = await User.findByPk(request.userId, { attributes: ['username'] });
+  const user = await User.findByPk(request.userId, { attributes: ['id', 'username', 'avatarUrl'] });
   await ClanMessage.create({ clanId, userId: request.userId, type: 'system', content: `${user.username} انضم للعشيرة` });
+  emitToClan(clanId, 'clan:member-joined', { clanId, user: user.toJSON() });
 };
 
 const rejectRequest = async (userId, clanId, requestId) => {
@@ -281,30 +293,46 @@ const sendMessage = async (userId, clanId, { content, type = 'text' }) => {
 
   const message = await ClanMessage.create({ clanId, userId, type, content });
   const user = await User.findByPk(userId, { attributes: MEMBER_ATTRS });
-  return { ...message.toJSON(), User: user.toJSON() };
+  const payload = { ...message.toJSON(), User: user.toJSON() };
+  emitToClan(clanId, 'clan:message', { clanId, message: payload });
+  return payload;
 };
 
 const sendGameCode = async (userId, clanId, roomCode) => {
   await assertMember(userId, clanId);
-  const user = await User.findByPk(userId, { attributes: ['username'] });
+  const user = await User.findByPk(userId, { attributes: MEMBER_ATTRS });
 
   const message = await ClanMessage.create({
     clanId, userId, type: 'game_code',
     content: `${user.username} يدعوكم للعب!`,
     roomCode,
   });
-  return message;
+  const payload = { ...message.toJSON(), User: user.toJSON() };
+  emitToClan(clanId, 'clan:message', { clanId, message: payload });
+  return payload;
 };
 
 const getMessages = async (clanId, query) => {
-  const { page, limit, offset } = getPagination(query);
-  const { count, rows } = await ClanMessage.findAndCountAll({
-    where: { clanId },
+  const limit = Math.min(parseInt(query.limit) || 30, 100);
+  const where = { clanId };
+
+  // Cursor-based pagination via 'before' messageId
+  if (query.before) {
+    const cursor = await ClanMessage.findByPk(query.before, { attributes: ['createdAt'] });
+    if (cursor) where.createdAt = { [Op.lt]: cursor.createdAt };
+  }
+
+  const rows = await ClanMessage.findAll({
+    where,
     include: [{ model: User, attributes: MEMBER_ATTRS }],
     order: [['createdAt', 'DESC']],
-    limit, offset,
+    limit,
   });
-  return { messages: rows, meta: getPageMeta(count, page, limit) };
+
+  const hasMore = rows.length === limit;
+  const nextBefore = hasMore ? rows[rows.length - 1].id : null;
+
+  return { messages: rows, limit, hasMore, nextBefore };
 };
 
 const pinMessage = async (userId, clanId, messageId) => {
@@ -312,6 +340,7 @@ const pinMessage = async (userId, clanId, messageId) => {
   const message = await ClanMessage.findOne({ where: { id: messageId, clanId } });
   if (!message) throw new AppError('الرسالة غير موجودة', 404);
   await message.update({ isPinned: !message.isPinned });
+  emitToClan(clanId, 'clan:updated', { clanId });
   return message;
 };
 

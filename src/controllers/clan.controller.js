@@ -96,8 +96,8 @@ const sendGameCode = asyncHandler(async (req, res) => {
 });
 
 const getMessages = asyncHandler(async (req, res) => {
-  const { messages, meta } = await clanService.getMessages(req.params.id, req.query);
-  ApiResponse.paginated(res, messages, meta.total, meta.page, meta.limit);
+  const result = await clanService.getMessages(req.params.id, req.query);
+  ApiResponse.success(res, result);
 });
 
 const pinMessage = asyncHandler(async (req, res) => {
