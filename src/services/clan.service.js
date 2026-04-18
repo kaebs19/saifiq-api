@@ -69,14 +69,19 @@ const createClan = async (userId, { name, description, badge, color }) => {
   });
 };
 
-const getClan = async (clanId) => {
+const getClan = async (clanId, userId = null) => {
   const clan = await Clan.findByPk(clanId, {
     include: [{ model: User, as: 'owner', attributes: MEMBER_ATTRS }],
   });
   if (!clan) throw new AppError('العشيرة غير موجودة', 404);
 
   const memberCount = await ClanMember.count({ where: { clanId } });
-  return { ...clan.toJSON(), memberCount };
+  let myRole = null;
+  if (userId) {
+    const member = await ClanMember.findOne({ where: { clanId, userId } });
+    myRole = member?.role || null;
+  }
+  return { ...clan.toJSON(), memberCount, myRole };
 };
 
 const updateClan = async (userId, clanId, data) => {

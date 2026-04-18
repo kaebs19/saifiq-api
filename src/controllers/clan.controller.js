@@ -9,7 +9,7 @@ const createClan = asyncHandler(async (req, res) => {
 });
 
 const getClan = asyncHandler(async (req, res) => {
-  const clan = await clanService.getClan(req.params.id);
+  const clan = await clanService.getClan(req.params.id, req.user.id);
   ApiResponse.success(res, clan);
 });
 
