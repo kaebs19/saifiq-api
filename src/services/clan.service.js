@@ -292,13 +292,26 @@ const getPendingRequests = async (userId, clanId) => {
 
 // ── Chat ──
 
-const sendMessage = async (userId, clanId, { content, type = 'text' }) => {
+const sendMessage = async (userId, clanId, { content, type = 'text', replyToId = null }) => {
   await assertMember(userId, clanId);
   if (type === 'announcement') await assertRole(userId, clanId, 'owner', 'admin');
 
-  const message = await ClanMessage.create({ clanId, userId, type, content });
+  const message = await ClanMessage.create({ clanId, userId, type, content, replyToId });
   const user = await User.findByPk(userId, { attributes: MEMBER_ATTRS });
-  const payload = { ...message.toJSON(), User: user.toJSON() };
+
+  let replyToSnippet = null;
+  let replyToUsername = null;
+  if (replyToId) {
+    const original = await ClanMessage.findByPk(replyToId, {
+      include: [{ model: User, attributes: ['username'] }],
+    });
+    if (original) {
+      replyToSnippet = original.content?.substring(0, 80) || '';
+      replyToUsername = original.User?.username || null;
+    }
+  }
+
+  const payload = { ...message.toJSON(), User: user.toJSON(), replyToSnippet, replyToUsername };
   emitToClan(clanId, 'clan:message', { clanId, message: payload });
   return payload;
 };
@@ -329,15 +342,31 @@ const getMessages = async (clanId, query) => {
 
   const rows = await ClanMessage.findAll({
     where,
-    include: [{ model: User, attributes: MEMBER_ATTRS }],
+    include: [
+      { model: User, attributes: MEMBER_ATTRS },
+      {
+        model: ClanMessage, as: 'replyTo',
+        attributes: ['id', 'content', 'userId'],
+        include: [{ model: User, attributes: ['username'] }],
+      },
+    ],
     order: [['createdAt', 'DESC']],
     limit,
+  });
+
+  const messages = rows.map((msg) => {
+    const json = msg.toJSON();
+    if (json.replyTo) {
+      json.replyToSnippet = json.replyTo.content?.substring(0, 80) || '';
+      json.replyToUsername = json.replyTo.User?.username || null;
+    }
+    return json;
   });
 
   const hasMore = rows.length === limit;
   const nextBefore = hasMore ? rows[rows.length - 1].id : null;
 
-  return { messages: rows, limit, hasMore, nextBefore };
+  return { messages, limit, hasMore, nextBefore };
 };
 
 const pinMessage = async (userId, clanId, messageId) => {

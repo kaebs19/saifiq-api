@@ -69,6 +69,7 @@ ClanMember.belongsTo(Clan, { foreignKey: 'clanId' });
 ClanMessage.belongsTo(User, { foreignKey: 'userId' });
 ClanRequest.belongsTo(User, { foreignKey: 'userId' });
 ClanRequest.belongsTo(Clan, { foreignKey: 'clanId' });
+ClanMessage.belongsTo(ClanMessage, { as: 'replyTo', foreignKey: 'replyToId' });
 User.hasOne(ClanMember, { foreignKey: 'userId' });
 
 // ── IAP associations ──

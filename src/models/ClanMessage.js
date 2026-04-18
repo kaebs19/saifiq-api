@@ -31,6 +31,10 @@ const ClanMessage = sequelize.define('ClanMessage', {
     type: DataTypes.BOOLEAN,
     defaultValue: false,
   },
+  replyToId: {
+    type: DataTypes.UUID,
+    allowNull: true,
+  },
 }, {
   timestamps: true,
   updatedAt: false,

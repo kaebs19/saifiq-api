@@ -18,6 +18,7 @@ const updateClanSchema = Joi.object({
 const messageSchema = Joi.object({
   content: Joi.string().min(1).max(500).required(),
   type: Joi.string().valid('text', 'announcement').optional(),
+  replyToId: Joi.string().uuid().allow(null).optional(),
 });
 
 const gameCodeSchema = Joi.object({
