@@ -3,6 +3,7 @@ const { Clan, ClanMember, ClanMessage, ClanRequest, MessageReport, ClanEvent, Tr
 const { isOnline, getIo } = require('../socket/connectionManager');
 const AppError = require('../utils/AppError');
 const { getPagination, getPageMeta } = require('../utils/pagination');
+const push = require('./push.service');
 
 const emitToClan = (clanId, event, payload) => {
   const io = getIo();
@@ -161,6 +162,7 @@ const joinClan = async (userId, clanId) => {
     const user = await User.findByPk(userId, { attributes: ['id', 'username', 'avatarUrl'] });
     await ClanMessage.create({ clanId, userId, type: 'system', content: `${user.username} انضم للعشيرة` });
     emitToClan(clanId, 'clan:member-joined', { clanId, user: user.toJSON() });
+    push.pushMemberJoined(clanId, user.username).catch(() => {});
     return { status: 'joined' };
   }
 
@@ -192,6 +194,7 @@ const kickMember = async (userId, clanId, targetId) => {
   const user = await User.findByPk(targetId, { attributes: ['username'] });
   await ClanMessage.create({ clanId, userId, type: 'system', content: `${user.username} تم طرده من العشيرة` });
   emitToClan(clanId, 'clan:member-left', { clanId, userId: targetId });
+  push.pushKicked(clanId, targetId).catch(() => {});
 };
 
 const promoteMember = async (userId, clanId, targetId) => {
@@ -200,6 +203,7 @@ const promoteMember = async (userId, clanId, targetId) => {
   if (target.role !== 'member') throw new AppError('يمكن ترقية الأعضاء فقط', 400);
   await target.update({ role: 'admin' });
   emitToClan(clanId, 'clan:member-role-changed', { clanId, userId: targetId, newRole: 'admin' });
+  push.pushRoleChanged(clanId, targetId, 'admin').catch(() => {});
 };
 
 const demoteMember = async (userId, clanId, targetId) => {
@@ -208,6 +212,7 @@ const demoteMember = async (userId, clanId, targetId) => {
   if (target.role !== 'admin') throw new AppError('يمكن تنزيل المشرفين فقط', 400);
   await target.update({ role: 'member' });
   emitToClan(clanId, 'clan:member-role-changed', { clanId, userId: targetId, newRole: 'member' });
+  push.pushRoleChanged(clanId, targetId, 'member').catch(() => {});
 };
 
 const transferOwnership = async (userId, clanId, targetId) => {
@@ -247,6 +252,8 @@ const acceptRequest = async (userId, clanId, requestId) => {
   const user = await User.findByPk(request.userId, { attributes: ['id', 'username', 'avatarUrl'] });
   await ClanMessage.create({ clanId, userId: request.userId, type: 'system', content: `${user.username} انضم للعشيرة` });
   emitToClan(clanId, 'clan:member-joined', { clanId, user: user.toJSON() });
+  push.pushRequestAccepted(clanId, request.userId).catch(() => {});
+  push.pushMemberJoined(clanId, user.username).catch(() => {});
 };
 
 const rejectRequest = async (userId, clanId, requestId) => {
@@ -469,6 +476,7 @@ const muteMember = async (userId, clanId, targetId, durationMinutes) => {
   const mutedUntil = new Date(Date.now() + durationMinutes * 60 * 1000);
   await target.update({ mutedUntil });
   emitToClan(clanId, 'clan:member-role-changed', { clanId, userId: targetId, newRole: target.role });
+  push.pushMuted(clanId, targetId, mutedUntil).catch(() => {});
   return { mutedUntil };
 };
 
