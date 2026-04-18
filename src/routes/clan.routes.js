@@ -41,6 +41,16 @@ router.delete('/:id/chat/:mid', c.deleteMessage);
 router.delete('/:id/chat', c.clearChatMessages);
 router.post('/:id/chat/:mid/report', validate(reportSchema), c.reportMessage);
 
+// Events / History
+router.get('/:id/events', c.getEvents);
+
+// Treasury
+router.post('/:id/treasury/donate', c.donateTreasury);
+router.get('/:id/treasury/history', c.getTreasuryHistory);
+
+// Wars
+router.get('/:id/wars/current', c.getCurrentWar);
+
 // Member leaderboard
 router.get('/:id/leaderboard', c.getMemberLeaderboard);
 

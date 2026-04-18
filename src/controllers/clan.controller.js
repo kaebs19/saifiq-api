@@ -143,11 +143,36 @@ const unmuteMember = asyncHandler(async (req, res) => {
   ApiResponse.success(res, null, 'تم رفع الكتم');
 });
 
+// ── Events ──
+const getEvents = asyncHandler(async (req, res) => {
+  const events = await clanService.getEvents(req.params.id, req.query);
+  ApiResponse.success(res, events);
+});
+
+// ── Treasury ──
+const donateTreasury = asyncHandler(async (req, res) => {
+  const result = await clanService.donate(req.user.id, req.params.id, req.body.amount);
+  ApiResponse.success(res, result, 'تم التبرع');
+});
+
+const getTreasuryHistory = asyncHandler(async (req, res) => {
+  const history = await clanService.getTreasuryHistory(req.params.id, req.query);
+  ApiResponse.success(res, history);
+});
+
+// ── Wars ──
+const getCurrentWar = asyncHandler(async (req, res) => {
+  const war = await clanService.getCurrentWar(req.user.id, req.params.id);
+  if (!war) return ApiResponse.success(res, null, 'لا توجد حرب حالياً', 404);
+  ApiResponse.success(res, war);
+});
+
 module.exports = {
   createClan, getClan, updateClan, deleteClan, searchClans, getMyClan,
   joinClan, leaveClan, kickMember, promoteMember, demoteMember, transferOwnership,
   acceptRequest, rejectRequest, getMembers, getPendingRequests,
   sendMessage, sendGameCode, getMessages, pinMessage,
   deleteMessage, clearChatMessages, reportMessage, muteMember, unmuteMember,
+  getEvents, donateTreasury, getTreasuryHistory, getCurrentWar,
   getClanLeaderboard, getMemberLeaderboard,
 };

@@ -19,6 +19,10 @@ const ClanRequest = require('./ClanRequest');
 const IapTransaction = require('./IapTransaction');
 const AdminAction = require('./AdminAction');
 const MessageReport = require('./MessageReport');
+const Device = require('./Device');
+const TreasuryTransaction = require('./TreasuryTransaction');
+const ClanEvent = require('./ClanEvent');
+const ClanWar = require('./ClanWar');
 
 // ── User associations ──
 User.hasMany(MatchPlayer, { foreignKey: 'userId' });
@@ -75,6 +79,24 @@ ClanMessage.belongsTo(ClanMessage, { as: 'replyTo', foreignKey: 'replyToId' });
 // ── MessageReport associations ──
 MessageReport.belongsTo(ClanMessage, { foreignKey: 'messageId' });
 MessageReport.belongsTo(User, { as: 'reporter', foreignKey: 'reporterId' });
+
+// ── Device associations ──
+Device.belongsTo(User, { foreignKey: 'userId' });
+User.hasMany(Device, { foreignKey: 'userId' });
+
+// ── Treasury associations ──
+TreasuryTransaction.belongsTo(Clan, { foreignKey: 'clanId' });
+TreasuryTransaction.belongsTo(User, { foreignKey: 'userId' });
+
+// ── ClanEvent associations ──
+ClanEvent.belongsTo(Clan, { foreignKey: 'clanId' });
+ClanEvent.belongsTo(User, { as: 'actor', foreignKey: 'actorId' });
+ClanEvent.belongsTo(User, { as: 'target', foreignKey: 'targetId' });
+
+// ── ClanWar associations ──
+ClanWar.belongsTo(Clan, { as: 'clanA', foreignKey: 'clanAId' });
+ClanWar.belongsTo(Clan, { as: 'clanB', foreignKey: 'clanBId' });
+ClanWar.belongsTo(Clan, { as: 'winner', foreignKey: 'winnerClanId' });
 User.hasOne(ClanMember, { foreignKey: 'userId' });
 
 // ── IAP associations ──
@@ -106,5 +128,9 @@ module.exports = {
   IapTransaction,
   AdminAction,
   MessageReport,
+  Device,
+  TreasuryTransaction,
+  ClanEvent,
+  ClanWar,
   sequelize,
 };

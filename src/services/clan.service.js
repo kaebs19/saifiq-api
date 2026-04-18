@@ -1,5 +1,5 @@
 const { Op } = require('sequelize');
-const { Clan, ClanMember, ClanMessage, ClanRequest, MessageReport, User, Transaction, sequelize } = require('../models');
+const { Clan, ClanMember, ClanMessage, ClanRequest, MessageReport, ClanEvent, TreasuryTransaction, ClanWar, User, Transaction, sequelize } = require('../models');
 const { isOnline, getIo } = require('../socket/connectionManager');
 const AppError = require('../utils/AppError');
 const { getPagination, getPageMeta } = require('../utils/pagination');
@@ -479,6 +479,111 @@ const unmuteMember = async (userId, clanId, targetId) => {
   emitToClan(clanId, 'clan:member-role-changed', { clanId, userId: targetId, newRole: target.role });
 };
 
+// ── Event Logger ──
+
+const logEvent = async (clanId, type, actorId = null, targetId = null, metadata = {}) => {
+  await ClanEvent.create({ clanId, type, actorId, targetId, metadata });
+};
+
+const getEvents = async (clanId, query) => {
+  const limit = Math.min(parseInt(query.limit) || 50, 100);
+  const events = await ClanEvent.findAll({
+    where: { clanId },
+    include: [
+      { model: User, as: 'actor', attributes: MEMBER_ATTRS },
+      { model: User, as: 'target', attributes: MEMBER_ATTRS },
+    ],
+    order: [['createdAt', 'DESC']],
+    limit,
+  });
+  return events;
+};
+
+// ── Treasury ──
+
+const donate = async (userId, clanId, amount) => {
+  await assertMember(userId, clanId);
+  if (!Number.isInteger(amount) || amount < 1) throw new AppError('الكمية غير صالحة', 400);
+
+  const result = await sequelize.transaction(async (t) => {
+    const user = await User.findByPk(userId, { lock: true, transaction: t });
+    if (user.gold < amount) throw new AppError('رصيد الذهب غير كافي', 400);
+
+    const clan = await Clan.findByPk(clanId, { lock: true, transaction: t });
+    await user.update({ gold: user.gold - amount }, { transaction: t });
+    await clan.update({ treasury: clan.treasury + amount }, { transaction: t });
+
+    await TreasuryTransaction.create({
+      clanId, userId, type: 'donation', amount,
+    }, { transaction: t });
+
+    await Transaction.create({
+      userId, amount: -amount, type: 'purchase', currency: 'gold',
+      description: `تبرع للعشيرة: ${clan.name}`,
+    }, { transaction: t });
+
+    return { amount, newTreasury: clan.treasury + amount, newUserGold: user.gold - amount };
+  });
+
+  await logEvent(clanId, 'treasury_donation', userId, null, { amount });
+  return result;
+};
+
+const getTreasuryHistory = async (clanId, query) => {
+  const limit = Math.min(parseInt(query.limit) || 50, 100);
+  const rows = await TreasuryTransaction.findAll({
+    where: { clanId },
+    include: [{ model: User, attributes: MEMBER_ATTRS }],
+    order: [['createdAt', 'DESC']],
+    limit,
+  });
+  return rows;
+};
+
+// ── Clan Wars ──
+
+const getCurrentWar = async (userId, clanId) => {
+  const member = await ClanMember.findOne({ where: { userId } });
+  if (!member) throw new AppError('أنت لست عضواً في عشيرة', 400);
+
+  const war = await ClanWar.findOne({
+    where: {
+      [Op.or]: [{ clanAId: clanId }, { clanBId: clanId }],
+      status: { [Op.in]: ['scheduled', 'active'] },
+    },
+    include: [
+      { model: Clan, as: 'clanA', attributes: ['id', 'name', 'badge', 'color'] },
+      { model: Clan, as: 'clanB', attributes: ['id', 'name', 'badge', 'color'] },
+    ],
+    order: [['createdAt', 'DESC']],
+  });
+
+  if (!war) return null;
+
+  const isClanA = war.clanAId === clanId;
+  return {
+    id: war.id,
+    status: war.status,
+    startAt: war.startAt,
+    endAt: war.endAt,
+    myClan: {
+      clanId: isClanA ? war.clanAId : war.clanBId,
+      name: isClanA ? war.clanA.name : war.clanB.name,
+      badge: isClanA ? war.clanA.badge : war.clanB.badge,
+      color: isClanA ? war.clanA.color : war.clanB.color,
+      score: isClanA ? war.clanAScore : war.clanBScore,
+    },
+    enemyClan: {
+      clanId: isClanA ? war.clanBId : war.clanAId,
+      name: isClanA ? war.clanB.name : war.clanA.name,
+      badge: isClanA ? war.clanB.badge : war.clanA.badge,
+      color: isClanA ? war.clanB.color : war.clanA.color,
+      score: isClanA ? war.clanBScore : war.clanAScore,
+    },
+    winnerClanId: war.winnerClanId,
+  };
+};
+
 module.exports = {
   createClan, getClan, updateClan, deleteClan, searchClans, getMyClan,
   joinClan, leaveClan, kickMember, promoteMember, demoteMember, transferOwnership,
@@ -486,5 +591,6 @@ module.exports = {
   sendMessage, sendGameCode, getMessages, pinMessage,
   deleteMessage, clearChat, reportMessage, muteMember, unmuteMember,
   getClanLeaderboard, getMemberLeaderboard,
+  logEvent, getEvents, donate, getTreasuryHistory, getCurrentWar,
   checkLevelUp,
 };

@@ -48,6 +48,10 @@ const Clan = sequelize.define('Clan', {
     type: DataTypes.BOOLEAN,
     defaultValue: true,
   },
+  treasury: {
+    type: DataTypes.INTEGER,
+    defaultValue: 0,
+  },
   readOnly: {
     type: DataTypes.BOOLEAN,
     defaultValue: false,

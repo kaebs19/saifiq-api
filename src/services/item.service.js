@@ -1,4 +1,4 @@
-const { Item, User, UserItem, Transaction, sequelize } = require('../models');
+const { Item, User, UserItem, Transaction, ClanMember, Clan, sequelize } = require('../models');
 const { Op } = require('sequelize');
 const AppError = require('../utils/AppError');
 
@@ -43,19 +43,26 @@ const buyItem = async (userId, itemType) => {
   const item = await Item.findOne({ where: { type: itemType, isActive: true } });
   if (!item) throw new AppError('الأداة غير متاحة', 404);
 
+  // Clan perk: 10% discount for Lv.2+ clan members
+  let cost = item.goldCost;
+  const membership = await ClanMember.findOne({ where: { userId }, include: [{ model: Clan, attributes: ['level'] }] });
+  if (membership?.Clan?.level >= 2) {
+    cost = Math.floor(cost * 0.9);
+  }
+
   const result = await sequelize.transaction(async (t) => {
     const user = await User.findByPk(userId, { lock: true, transaction: t });
     if (!user) throw new AppError('المستخدم غير موجود', 404);
-    if (user.gold < item.goldCost) throw new AppError('رصيد الذهب غير كافي', 400);
+    if (user.gold < cost) throw new AppError('رصيد الذهب غير كافي', 400);
 
-    await user.update({ gold: user.gold - item.goldCost }, { transaction: t });
+    await user.update({ gold: user.gold - cost }, { transaction: t });
 
     await Transaction.create({
       userId,
-      amount: -item.goldCost,
+      amount: -cost,
       type: 'purchase',
       currency: 'gold',
-      description: `شراء أداة: ${item.nameAr}`,
+      description: `شراء أداة: ${item.nameAr}${cost < item.goldCost ? ' (خصم عشيرة)' : ''}`,
     }, { transaction: t });
 
     const [userItem] = await UserItem.findOrCreate({
@@ -65,7 +72,7 @@ const buyItem = async (userId, itemType) => {
     });
     await userItem.update({ quantity: userItem.quantity + 1 }, { transaction: t });
 
-    return { itemType, quantity: userItem.quantity + 1, goldSpent: item.goldCost, remainingGold: user.gold - item.goldCost };
+    return { itemType, quantity: userItem.quantity + 1, goldSpent: cost, discount: cost < item.goldCost, remainingGold: user.gold - cost };
   });
 
   return result;
