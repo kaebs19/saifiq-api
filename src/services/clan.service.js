@@ -1,5 +1,5 @@
 const { Op } = require('sequelize');
-const { Clan, ClanMember, ClanMessage, ClanRequest, User, Transaction, sequelize } = require('../models');
+const { Clan, ClanMember, ClanMessage, ClanRequest, MessageReport, User, Transaction, sequelize } = require('../models');
 const { isOnline, getIo } = require('../socket/connectionManager');
 const AppError = require('../utils/AppError');
 const { getPagination, getPageMeta } = require('../utils/pagination');
@@ -89,7 +89,7 @@ const updateClan = async (userId, clanId, data) => {
   const clan = await Clan.findByPk(clanId);
   if (!clan) throw new AppError('العشيرة غير موجودة', 404);
 
-  const allowed = ['name', 'description', 'badge', 'color', 'isOpen'];
+  const allowed = ['name', 'description', 'badge', 'color', 'isOpen', 'readOnly'];
   const patch = {};
   for (const key of allowed) if (data[key] !== undefined) patch[key] = data[key];
 
@@ -273,6 +273,7 @@ const getMembers = async (clanId, query) => {
     ...m.User.toJSON(),
     role: m.role,
     weeklyPoints: m.weeklyPoints,
+    mutedUntil: m.mutedUntil,
     joinedAt: m.createdAt,
     isOnline: isOnline(m.userId),
   }));
@@ -293,7 +294,19 @@ const getPendingRequests = async (userId, clanId) => {
 // ── Chat ──
 
 const sendMessage = async (userId, clanId, { content, type = 'text', replyToId = null }) => {
-  await assertMember(userId, clanId);
+  const member = await assertMember(userId, clanId);
+
+  // Mute check
+  if (member.mutedUntil && new Date(member.mutedUntil) > new Date()) {
+    throw new AppError(`أنت مكتوم حتى ${new Date(member.mutedUntil).toLocaleString('ar-SA')}`, 403);
+  }
+
+  // Read-only check
+  const clan = await Clan.findByPk(clanId);
+  if (clan.readOnly && member.role === 'member') {
+    throw new AppError('الشات في وضع الإعلانات فقط', 403);
+  }
+
   if (type === 'announcement') await assertRole(userId, clanId, 'owner', 'admin');
 
   const message = await ClanMessage.create({ clanId, userId, type, content, replyToId });
@@ -410,11 +423,68 @@ const getMemberLeaderboard = async (clanId) => {
   }));
 };
 
+// ── Delete Message ──
+
+const deleteMessage = async (userId, clanId, messageId) => {
+  const member = await assertMember(userId, clanId);
+  const message = await ClanMessage.findOne({ where: { id: messageId, clanId } });
+  if (!message) throw new AppError('الرسالة غير موجودة', 404);
+
+  // Author can delete own, admin/owner can delete any
+  if (message.userId !== userId && !['admin', 'owner'].includes(member.role)) {
+    throw new AppError('ليس لديك صلاحية حذف هذه الرسالة', 403);
+  }
+
+  await message.destroy();
+  emitToClan(clanId, 'clan:message-deleted', { clanId, messageId });
+};
+
+// ── Clear Chat ──
+
+const clearChat = async (userId, clanId) => {
+  await assertRole(userId, clanId, 'owner');
+  await ClanMessage.destroy({ where: { clanId } });
+  emitToClan(clanId, 'clan:chat-cleared', { clanId });
+};
+
+// ── Report Message ──
+
+const reportMessage = async (userId, clanId, messageId, reason) => {
+  await assertMember(userId, clanId);
+  const message = await ClanMessage.findOne({ where: { id: messageId, clanId } });
+  if (!message) throw new AppError('الرسالة غير موجودة', 404);
+
+  await MessageReport.create({ messageId, reporterId: userId, reason });
+};
+
+// ── Mute / Unmute ──
+
+const muteMember = async (userId, clanId, targetId, durationMinutes) => {
+  const actor = await assertRole(userId, clanId, 'owner', 'admin');
+  const target = await assertMember(targetId, clanId);
+
+  if (target.role === 'owner') throw new AppError('لا يمكن كتم الزعيم', 403);
+  if (target.role === 'admin' && actor.role !== 'owner') throw new AppError('فقط الزعيم يمكنه كتم المشرفين', 403);
+
+  const mutedUntil = new Date(Date.now() + durationMinutes * 60 * 1000);
+  await target.update({ mutedUntil });
+  emitToClan(clanId, 'clan:member-role-changed', { clanId, userId: targetId, newRole: target.role });
+  return { mutedUntil };
+};
+
+const unmuteMember = async (userId, clanId, targetId) => {
+  await assertRole(userId, clanId, 'owner', 'admin');
+  const target = await assertMember(targetId, clanId);
+  await target.update({ mutedUntil: null });
+  emitToClan(clanId, 'clan:member-role-changed', { clanId, userId: targetId, newRole: target.role });
+};
+
 module.exports = {
   createClan, getClan, updateClan, deleteClan, searchClans, getMyClan,
   joinClan, leaveClan, kickMember, promoteMember, demoteMember, transferOwnership,
   acceptRequest, rejectRequest, getMembers, getPendingRequests,
   sendMessage, sendGameCode, getMessages, pinMessage,
+  deleteMessage, clearChat, reportMessage, muteMember, unmuteMember,
   getClanLeaderboard, getMemberLeaderboard,
   checkLevelUp,
 };

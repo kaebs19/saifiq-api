@@ -18,6 +18,7 @@ const ClanMessage = require('./ClanMessage');
 const ClanRequest = require('./ClanRequest');
 const IapTransaction = require('./IapTransaction');
 const AdminAction = require('./AdminAction');
+const MessageReport = require('./MessageReport');
 
 // ── User associations ──
 User.hasMany(MatchPlayer, { foreignKey: 'userId' });
@@ -70,6 +71,10 @@ ClanMessage.belongsTo(User, { foreignKey: 'userId' });
 ClanRequest.belongsTo(User, { foreignKey: 'userId' });
 ClanRequest.belongsTo(Clan, { foreignKey: 'clanId' });
 ClanMessage.belongsTo(ClanMessage, { as: 'replyTo', foreignKey: 'replyToId' });
+
+// ── MessageReport associations ──
+MessageReport.belongsTo(ClanMessage, { foreignKey: 'messageId' });
+MessageReport.belongsTo(User, { as: 'reporter', foreignKey: 'reporterId' });
 User.hasOne(ClanMember, { foreignKey: 'userId' });
 
 // ── IAP associations ──
@@ -100,5 +105,6 @@ module.exports = {
   ClanRequest,
   IapTransaction,
   AdminAction,
+  MessageReport,
   sequelize,
 };

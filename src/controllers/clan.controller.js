@@ -117,10 +117,37 @@ const getMemberLeaderboard = asyncHandler(async (req, res) => {
   ApiResponse.success(res, data);
 });
 
+// ── Moderation ──
+const deleteMessage = asyncHandler(async (req, res) => {
+  await clanService.deleteMessage(req.user.id, req.params.id, req.params.mid);
+  ApiResponse.success(res, null, 'تم حذف الرسالة');
+});
+
+const clearChatMessages = asyncHandler(async (req, res) => {
+  await clanService.clearChat(req.user.id, req.params.id);
+  ApiResponse.success(res, null, 'تم مسح الشات');
+});
+
+const reportMessage = asyncHandler(async (req, res) => {
+  await clanService.reportMessage(req.user.id, req.params.id, req.params.mid, req.body.reason);
+  ApiResponse.success(res, null, 'تم استلام البلاغ', 201);
+});
+
+const muteMember = asyncHandler(async (req, res) => {
+  const result = await clanService.muteMember(req.user.id, req.params.id, req.params.uid, req.body.durationMinutes);
+  ApiResponse.success(res, result, 'تم الكتم');
+});
+
+const unmuteMember = asyncHandler(async (req, res) => {
+  await clanService.unmuteMember(req.user.id, req.params.id, req.params.uid);
+  ApiResponse.success(res, null, 'تم رفع الكتم');
+});
+
 module.exports = {
   createClan, getClan, updateClan, deleteClan, searchClans, getMyClan,
   joinClan, leaveClan, kickMember, promoteMember, demoteMember, transferOwnership,
   acceptRequest, rejectRequest, getMembers, getPendingRequests,
   sendMessage, sendGameCode, getMessages, pinMessage,
+  deleteMessage, clearChatMessages, reportMessage, muteMember, unmuteMember,
   getClanLeaderboard, getMemberLeaderboard,
 };

@@ -13,6 +13,7 @@ const updateClanSchema = Joi.object({
   badge: Joi.string().max(50).allow('', null).optional(),
   color: Joi.string().max(7).allow('', null).optional(),
   isOpen: Joi.boolean().optional(),
+  readOnly: Joi.boolean().optional(),
 });
 
 const messageSchema = Joi.object({
@@ -25,4 +26,12 @@ const gameCodeSchema = Joi.object({
   roomCode: Joi.string().min(1).max(20).required(),
 });
 
-module.exports = { createClanSchema, updateClanSchema, messageSchema, gameCodeSchema };
+const reportSchema = Joi.object({
+  reason: Joi.string().max(500).allow('', null).optional(),
+});
+
+const muteSchema = Joi.object({
+  durationMinutes: Joi.number().integer().min(1).max(10080).required(), // max 7 days
+});
+
+module.exports = { createClanSchema, updateClanSchema, messageSchema, gameCodeSchema, reportSchema, muteSchema };

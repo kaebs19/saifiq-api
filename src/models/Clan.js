@@ -48,6 +48,10 @@ const Clan = sequelize.define('Clan', {
     type: DataTypes.BOOLEAN,
     defaultValue: true,
   },
+  readOnly: {
+    type: DataTypes.BOOLEAN,
+    defaultValue: false,
+  },
 }, {
   timestamps: true,
 });

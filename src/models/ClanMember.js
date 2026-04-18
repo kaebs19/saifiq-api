@@ -23,6 +23,10 @@ const ClanMember = sequelize.define('ClanMember', {
     type: DataTypes.INTEGER,
     defaultValue: 0,
   },
+  mutedUntil: {
+    type: DataTypes.DATE,
+    allowNull: true,
+  },
 }, {
   timestamps: true,
   indexes: [{ unique: true, fields: ['clanId', 'userId'] }],

@@ -2,7 +2,7 @@ const { Router } = require('express');
 const c = require('../controllers/clan.controller');
 const { authenticate } = require('../middleware/auth');
 const validate = require('../middleware/validate');
-const { createClanSchema, updateClanSchema, messageSchema, gameCodeSchema } = require('../validators/clan.validator');
+const { createClanSchema, updateClanSchema, messageSchema, gameCodeSchema, reportSchema, muteSchema } = require('../validators/clan.validator');
 
 const router = Router();
 router.use(authenticate);
@@ -23,6 +23,8 @@ router.get('/:id/members', c.getMembers);
 router.post('/:id/members/:uid/kick', c.kickMember);
 router.post('/:id/members/:uid/promote', c.promoteMember);
 router.post('/:id/members/:uid/demote', c.demoteMember);
+router.post('/:id/members/:uid/mute', validate(muteSchema), c.muteMember);
+router.post('/:id/members/:uid/unmute', c.unmuteMember);
 router.post('/:id/transfer/:uid', c.transferOwnership);
 
 // Requests
@@ -35,6 +37,9 @@ router.get('/:id/chat', c.getMessages);
 router.post('/:id/chat', validate(messageSchema), c.sendMessage);
 router.post('/:id/chat/game-code', validate(gameCodeSchema), c.sendGameCode);
 router.post('/:id/chat/:mid/pin', c.pinMessage);
+router.delete('/:id/chat/:mid', c.deleteMessage);
+router.delete('/:id/chat', c.clearChatMessages);
+router.post('/:id/chat/:mid/report', validate(reportSchema), c.reportMessage);
 
 // Member leaderboard
 router.get('/:id/leaderboard', c.getMemberLeaderboard);
