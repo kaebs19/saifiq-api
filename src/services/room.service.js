@@ -31,13 +31,13 @@ const createRoom = async (hostId, mode) => {
   await leaveRoom(hostId);
 
   const code = await generateCode();
-  const host = await User.findByPk(hostId, { attributes: ['id', 'username', 'avatarUrl'] });
+  const host = await User.findByPk(hostId, { attributes: ['id', 'username', 'avatarUrl', 'level'] });
 
   const room = {
     code,
     hostId,
     mode,
-    players: [{ id: host.id, username: host.username, avatarUrl: host.avatarUrl }],
+    players: [{ id: host.id, username: host.username, avatarUrl: host.avatarUrl, level: host.level }],
     createdAt: Date.now(),
   };
 
@@ -62,13 +62,14 @@ const joinRoom = async (userId, code) => {
   // Leave any existing room
   await leaveRoom(userId);
 
-  const user = await User.findByPk(userId, { attributes: ['id', 'username', 'avatarUrl'] });
-  room.players.push({ id: user.id, username: user.username, avatarUrl: user.avatarUrl });
+  const user = await User.findByPk(userId, { attributes: ['id', 'username', 'avatarUrl', 'level'] });
+  const newPlayer = { id: user.id, username: user.username, avatarUrl: user.avatarUrl, level: user.level };
+  room.players.push(newPlayer);
 
   await redis.set(ROOM_KEY(code), JSON.stringify(room), 'EX', ROOM_TTL);
   await redis.set(PLAYER_ROOM_KEY(userId), code, 'EX', ROOM_TTL);
 
-  return room;
+  return { ...room, newPlayer };
 };
 
 // ── Leave Room ──

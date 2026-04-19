@@ -43,6 +43,8 @@ const registerRoomHandlers = (io, socket) => {
 
       // Broadcast to all in room
       io.to(`room:${code}`).emit('room:player-joined', {
+        code,
+        player: room.newPlayer,
         players: room.players,
         playerCount: room.players.length,
         required,
@@ -82,11 +84,13 @@ const registerRoomHandlers = (io, socket) => {
 
       if (result.disbanded) {
         // Host left — disband and notify everyone
-        io.to(`room:${result.code}`).emit('room:disbanded', { reason: 'المضيف غادر الغرفة' });
+        io.to(`room:${result.code}`).emit('room:disbanded', { code: result.code, reason: 'المضيف غادر الغرفة' });
         io.in(`room:${result.code}`).socketsLeave(`room:${result.code}`);
       } else {
         // Regular player left
         io.to(`room:${result.code}`).emit('room:player-left', {
+          code: result.code,
+          userId,
           players: result.room.players,
           playerCount: result.room.players.length,
           required: roomService.REQUIRED[result.room.mode],
@@ -113,22 +117,29 @@ const registerRoomHandlers = (io, socket) => {
       if (!friends) throw new Error('هذا المستخدم ليس من أصدقائك');
 
       // Get inviter info
-      const inviter = await User.findByPk(userId, { attributes: ['username'] });
+      const inviter = await User.findByPk(userId, { attributes: ['id', 'username', 'avatarUrl'] });
 
       // Send push + in-app notification
       const modeLabel = room.mode === '1v1' ? 'تحدي 1 ضد 1' : 'تحدي جماعي';
       await notificationService.notify(friendId, {
-        title: 'دعوة للتحدي',
-        body: `${inviter.username} يدعوك لـ${modeLabel}`,
+        title: `${inviter.username} يدعوك للعب!`,
+        body: `انضم لـ${modeLabel} الآن`,
         type: 'match_invite',
-        data: { roomCode: code, inviterId: userId, mode: room.mode },
+        data: {
+          type: 'room_invite',
+          roomCode: code,
+          mode: room.mode,
+          fromUserId: inviter.id,
+          fromUsername: inviter.username,
+        },
       });
 
       // Send real-time event if online
       emitToUser(friendId, 'room:invited', {
         code,
         mode: room.mode,
-        inviterName: inviter.username,
+        fromUser: { id: inviter.id, username: inviter.username, avatarUrl: inviter.avatarUrl },
+        inviterName: inviter.username, // backward compat
         shareLink: `https://saifiq.halmanhaj.com/join/${code}`,
       });
 
@@ -150,10 +161,12 @@ const handleDisconnect = async (io, userId) => {
     if (!result) return;
 
     if (result.disbanded) {
-      io.to(`room:${result.code}`).emit('room:disbanded', { reason: 'المضيف انقطع الاتصال' });
+      io.to(`room:${result.code}`).emit('room:disbanded', { code: result.code, reason: 'المضيف انقطع الاتصال' });
       io.in(`room:${result.code}`).socketsLeave(`room:${result.code}`);
     } else {
       io.to(`room:${result.code}`).emit('room:player-left', {
+        code: result.code,
+        userId,
         players: result.room.players,
         playerCount: result.room.players.length,
         required: roomService.REQUIRED[result.room.mode],
