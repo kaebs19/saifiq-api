@@ -25,7 +25,7 @@ app.set('trust proxy', 1);
 // Apple Universal Links — must be served before SPA fallback
 app.get('/.well-known/apple-app-site-association', (req, res) => {
   const teamId = process.env.APPLE_TEAM_ID || 'ZN3Z5KRWM7';
-  const bundleId = process.env.APPLE_BUNDLE_ID || 'com.saifiq.SaifAndAlmarifa';
+  const bundleId = process.env.APPLE_BUNDLE_ID || 'com.saifiq.app';
   res.setHeader('Content-Type', 'application/json');
   res.json({
     applinks: {
