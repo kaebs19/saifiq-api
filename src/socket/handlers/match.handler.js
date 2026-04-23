@@ -1,10 +1,13 @@
 const matchEngine = require('../../services/matchEngine.service');
-const { MatchPlayer } = require('../../models');
+const { MatchPlayer, Match, sequelize } = require('../../models');
 const { emitToUser } = require('../connectionManager');
 
 // Track which matches have started
 const startedMatches = new Set();
 const readyByMatch = new Map(); // matchId → Set<userId>
+
+// Rematch: matchId → Set<userId who accepted>
+const rematchRequests = new Map();
 
 const broadcastQuestion = async (io, matchId) => {
   const data = await matchEngine.getCurrentQuestion(matchId);
@@ -106,6 +109,59 @@ const registerMatchHandlers = (io, socket) => {
       const state = await matchEngine.loadState(matchId);
       if (state && matchEngine.allAnswered(state)) {
         setTimeout(() => advancePhase(io, matchId), 1000);
+      }
+    } catch (err) {
+      ack?.({ ok: false, error: err.message });
+    }
+  });
+
+  // ── Rematch ──
+  socket.on('match:rematch', async ({ matchId }, ack) => {
+    try {
+      // Verify player was in this match
+      const player = await MatchPlayer.findOne({ where: { matchId, userId } });
+      if (!player) {
+        ack?.({ ok: false, error: 'Not in this match' });
+        return;
+      }
+
+      const set = rematchRequests.get(matchId) || new Set();
+      set.add(userId);
+      rematchRequests.set(matchId, set);
+
+      // Notify other players someone requested rematch
+      const allPlayers = await MatchPlayer.findAll({ where: { matchId }, attributes: ['userId'] });
+      allPlayers
+        .filter((p) => p.userId !== userId)
+        .forEach((p) => emitToUser(p.userId, 'match:rematch-requested', { matchId, fromUserId: userId }));
+
+      ack?.({ ok: true, acceptedCount: set.size, required: allPlayers.length });
+
+      // If all accepted → create new match
+      if (set.size >= allPlayers.length) {
+        const playerIds = allPlayers.map((p) => p.userId);
+        const oldMatch = await Match.findByPk(matchId, { attributes: ['mode'] });
+
+        const newMatch = await sequelize.transaction(async (t) => {
+          const m = await Match.create({ mode: oldMatch.mode, status: 'waiting' }, { transaction: t });
+          await Promise.all(
+            playerIds.map((uid, idx) =>
+              MatchPlayer.create({
+                matchId: m.id,
+                userId: uid,
+                position: idx + 1,
+                status: 'active',
+              }, { transaction: t })
+            )
+          );
+          return m;
+        });
+
+        playerIds.forEach((uid) =>
+          emitToUser(uid, 'match:rematch-accepted', { matchId, newMatchId: newMatch.id })
+        );
+
+        rematchRequests.delete(matchId);
       }
     } catch (err) {
       ack?.({ ok: false, error: err.message });
