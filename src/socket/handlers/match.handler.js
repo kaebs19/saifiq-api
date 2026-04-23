@@ -10,10 +10,11 @@ const readyByMatch = new Map(); // matchId → Set<userId>
 const rematchRequests = new Map();
 
 const broadcastQuestion = async (io, matchId) => {
-  const data = await matchEngine.getCurrentQuestion(matchId);
+  const data = await matchEngine.getSpecQuestion(matchId);
   if (!data) return;
-
-  io.to(`match:${matchId}`).emit('match:question', data);
+  // Hide correctIndex from clients
+  const { correctIndex, ...payload } = data;
+  io.to(`match:${matchId}`).emit('match:question', payload);
 
   // Auto-advance after timeout
   setTimeout(async () => {
@@ -27,19 +28,21 @@ const advancePhase = async (io, matchId) => {
 
   if (result.done) {
     const summary = await matchEngine.endMatch(matchId);
-    io.to(`match:${matchId}`).emit('match:ended', summary);
+    const winnerScore = summary.winnerId ? (summary.scores[summary.winnerId] || 0) : 0;
+    io.to(`match:${matchId}`).emit('match:ended', {
+      matchId,
+      winnerId: summary.winnerId,
+      scores: summary.scores,
+      hp: summary.hp,
+      rewards: { gold: 50, xp: winnerScore },
+    });
     startedMatches.delete(matchId);
     readyByMatch.delete(matchId);
     return;
   }
 
-  io.to(`match:${matchId}`).emit('match:question', {
-    question: result.question,
-    index: result.index,
-    total: result.total,
-  });
-
-  setTimeout(() => advancePhase(io, matchId), matchEngine.QUESTION_TIME_MS + 2000);
+  // Use spec-compliant broadcast for subsequent questions too
+  await broadcastQuestion(io, matchId);
 };
 
 const registerMatchHandlers = (io, socket) => {
@@ -67,7 +70,10 @@ const registerMatchHandlers = (io, socket) => {
       if (readyByMatch.get(matchId).size >= totalPlayers && !startedMatches.has(matchId)) {
         startedMatches.add(matchId);
         await matchEngine.startMatch(matchId);
-        io.to(`match:${matchId}`).emit('match:started', { matchId });
+        io.to(`match:${matchId}`).emit('match:started', {
+          matchId,
+          startedAt: new Date().toISOString(),
+        });
         setTimeout(() => broadcastQuestion(io, matchId), 1000);
       }
     } catch (err) {
@@ -85,16 +91,22 @@ const registerMatchHandlers = (io, socket) => {
       ack?.({ ok: true, correct: result.correct, points: result.points });
 
       io.to(`match:${matchId}`).emit('match:answer-submitted', {
+        matchId,
+        questionId: result.questionId,
         userId,
+        selectedIndex: result.selectedIndex,
         correct: result.correct,
+        correctIndex: result.correctIndex,
+        newScore: result.newScore,
+        newHP: result.newHP,
+        attackTargetId: result.attack?.targetId || null,
         scores: result.scores,
         hp: result.hp,
-        attack: result.attack,
-        eliminated: result.eliminated,
       });
 
       if (result.attack?.damage > 0) {
         io.to(`match:${matchId}`).emit('match:attack', {
+          matchId,
           attackerId: userId,
           targetId: result.attack.targetId,
           damage: result.attack.damage,
@@ -102,8 +114,11 @@ const registerMatchHandlers = (io, socket) => {
         });
       }
 
+      // Emit one event per newly eliminated player
       if (result.eliminated?.length) {
-        io.to(`match:${matchId}`).emit('match:eliminated', { eliminated: result.eliminated });
+        result.eliminated.forEach((uid) => {
+          io.to(`match:${matchId}`).emit('match:eliminated', { matchId, userId: uid });
+        });
       }
 
       const state = await matchEngine.loadState(matchId);

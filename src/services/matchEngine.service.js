@@ -88,6 +88,26 @@ const sanitizeQuestion = (q, hiddenOptions = []) => ({
   timeMs: QUESTION_TIME_MS,
 });
 
+// Spec-compliant flat shape (iOS-friendly)
+const toSpecQuestion = (matchId, q, currentIndex, total) => ({
+  matchId,
+  questionId: q.id,
+  text: q.text,
+  options: (q.options || []).map((o) => o.text),
+  correctIndex: q.correctOptionIdx,
+  index: currentIndex + 1,
+  total,
+  timeLimit: Math.round(QUESTION_TIME_MS / 1000),
+});
+
+const getSpecQuestion = async (matchId) => {
+  const state = await loadState(matchId);
+  if (!state) return null;
+  const q = state.questions[state.currentIndex];
+  if (!q) return null;
+  return toSpecQuestion(matchId, q, state.currentIndex, state.questions.length);
+};
+
 const getCurrentQuestion = async (matchId) => {
   const state = await loadState(matchId);
   if (!state) return null;
@@ -160,6 +180,11 @@ const submitAnswer = async (matchId, userId, answer, timeMs) => {
   await saveState(matchId, state);
   return {
     correct,
+    correctIndex: question.correctOptionIdx,
+    questionId: question.id,
+    selectedIndex: Number.isFinite(Number(answer)) ? Number(answer) : null,
+    newScore: state.scores[userId],
+    newHP: state.hp[userId],
     scores: state.scores,
     hp: state.hp,
     attack: attackResult,
@@ -329,6 +354,8 @@ const endMatch = async (matchId) => {
 module.exports = {
   startMatch,
   getCurrentQuestion,
+  getSpecQuestion,
+  toSpecQuestion,
   submitAnswer,
   advanceQuestion,
   allAnswered,
