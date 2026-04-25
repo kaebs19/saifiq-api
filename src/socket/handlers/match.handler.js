@@ -1,28 +1,133 @@
 const matchEngine = require('../../services/matchEngine.service');
+const castleSiege = require('../../services/castleSiege.service');
 const { MatchPlayer, Match, sequelize } = require('../../models');
 const { emitToUser } = require('../connectionManager');
 
-// Track which matches have started
+// Track which matches have started + per-mode flag
 const startedMatches = new Set();
+const matchModeCache = new Map(); // matchId → mode
 const readyByMatch = new Map(); // matchId → Set<userId>
 
 // Rematch: matchId → Set<userId who accepted>
 const rematchRequests = new Map();
 
-const broadcastQuestion = async (io, matchId) => {
+const isCastleSiege = (mode) => mode === '1v1';
+
+// ════════════════════════════════════════════
+//  CASTLE SIEGE FLOW (1v1)
+// ════════════════════════════════════════════
+
+const sendCSQuestion = async (io, matchId) => {
+  const payload = await castleSiege.getQuestionPayload(matchId);
+  if (!payload) return;
+  io.to(`match:${matchId}`).emit('match:question', payload);
+
+  // Auto-end question if timer expires
+  setTimeout(() => resolveCSQuestion(io, matchId), castleSiege.QUESTION_TIME_MS + 500);
+};
+
+const resolveCSQuestion = async (io, matchId) => {
+  const state = await castleSiege.loadState(matchId);
+  if (!state || state.phase === 'ended') return;
+
+  // Mark unanswered as wrong
+  for (const id of state.playerIds) {
+    if (!state.players[id].answered) {
+      await castleSiege.submitAnswer(matchId, id, '', castleSiege.QUESTION_TIME_MS);
+    }
+  }
+
+  const result = await castleSiege.resolveQuestion(matchId);
+  if (!result) return;
+
+  // Broadcast each player's result
+  for (const r of result.results) {
+    io.to(`match:${matchId}`).emit('match:answer-submitted', {
+      matchId,
+      questionId: result.questionId,
+      ...r,
+    });
+  }
+
+  // Battle attacks
+  if (result.attack?.events?.length) {
+    for (const ev of result.attack.events) {
+      io.to(`match:${matchId}`).emit('match:attack', { matchId, ...ev });
+    }
+  }
+
+  // Eliminations
+  for (const uid of result.eliminated) {
+    io.to(`match:${matchId}`).emit('match:eliminated', { matchId, userId: uid });
+  }
+
+  // If battle ended by elimination → finalize
+  if (result.battleOver) {
+    setTimeout(async () => {
+      const updated = await castleSiege.loadState(matchId);
+      const winnerId = updated?.playerIds.find((id) => updated.players[id].hp > 0) || null;
+      const summary = await castleSiege.finalize(matchId, winnerId);
+      if (summary) io.to(`match:${matchId}`).emit('match:ended', summary);
+      cleanup(matchId);
+    }, 1500);
+    return;
+  }
+
+  // Otherwise advance after gap
+  setTimeout(() => advanceCS(io, matchId), castleSiege.QUESTION_GAP_MS);
+};
+
+const advanceCS = async (io, matchId) => {
+  const step = await castleSiege.advance(matchId);
+  if (!step) return;
+
+  if (step.kind === 'next-question') {
+    await sendCSQuestion(io, matchId);
+    return;
+  }
+
+  if (step.kind === 'phase-transition') {
+    io.to(`match:${matchId}`).emit('match:phase-result', {
+      matchId,
+      phase: 'collection',
+      powers: step.powers,
+      nextPhase: 'battle',
+    });
+
+    setTimeout(() => {
+      io.to(`match:${matchId}`).emit('match:phase', { matchId, phase: 'battle' });
+      setTimeout(() => sendCSQuestion(io, matchId), 500);
+    }, castleSiege.PHASE_TRANSITION_MS);
+    return;
+  }
+
+  if (step.kind === 'battle-end') {
+    const summary = await castleSiege.finalize(matchId, step.winnerId);
+    if (summary) io.to(`match:${matchId}`).emit('match:ended', summary);
+    cleanup(matchId);
+  }
+};
+
+const cleanup = (matchId) => {
+  startedMatches.delete(matchId);
+  readyByMatch.delete(matchId);
+  matchModeCache.delete(matchId);
+};
+
+// ════════════════════════════════════════════
+//  CLASSIC MCQ FLOW (4player)
+// ════════════════════════════════════════════
+
+const broadcastMCQQuestion = async (io, matchId) => {
   const data = await matchEngine.getSpecQuestion(matchId);
   if (!data) return;
-  // Hide correctIndex from clients
   const { correctIndex, ...payload } = data;
   io.to(`match:${matchId}`).emit('match:question', payload);
 
-  // Auto-advance after timeout
-  setTimeout(async () => {
-    await advancePhase(io, matchId);
-  }, matchEngine.QUESTION_TIME_MS + 2000);
+  setTimeout(() => advanceMCQ(io, matchId), matchEngine.QUESTION_TIME_MS + 2000);
 };
 
-const advancePhase = async (io, matchId) => {
+const advanceMCQ = async (io, matchId) => {
   const result = await matchEngine.advanceQuestion(matchId);
   if (!result) return;
 
@@ -36,14 +141,16 @@ const advancePhase = async (io, matchId) => {
       hp: summary.hp,
       rewards: { gold: 50, xp: winnerScore },
     });
-    startedMatches.delete(matchId);
-    readyByMatch.delete(matchId);
+    cleanup(matchId);
     return;
   }
 
-  // Use spec-compliant broadcast for subsequent questions too
-  await broadcastQuestion(io, matchId);
+  await broadcastMCQQuestion(io, matchId);
 };
+
+// ════════════════════════════════════════════
+//  HANDLERS
+// ════════════════════════════════════════════
 
 const registerMatchHandlers = (io, socket) => {
   const userId = socket.user.id;
@@ -59,22 +166,39 @@ const registerMatchHandlers = (io, socket) => {
       socket.join(`match:${matchId}`);
       ack?.({ ok: true });
 
-      // Track ready players
       if (!readyByMatch.has(matchId)) readyByMatch.set(matchId, new Set());
       readyByMatch.get(matchId).add(userId);
 
       io.to(`match:${matchId}`).emit('match:player-joined', { userId });
 
-      // Check if all players ready
       const totalPlayers = await MatchPlayer.count({ where: { matchId } });
       if (readyByMatch.get(matchId).size >= totalPlayers && !startedMatches.has(matchId)) {
         startedMatches.add(matchId);
-        await matchEngine.startMatch(matchId);
-        io.to(`match:${matchId}`).emit('match:started', {
-          matchId,
-          startedAt: new Date().toISOString(),
-        });
-        setTimeout(() => broadcastQuestion(io, matchId), 1000);
+
+        const match = await Match.findByPk(matchId, { attributes: ['mode'] });
+        const mode = match?.mode || '1v1';
+        matchModeCache.set(matchId, mode);
+
+        if (isCastleSiege(mode)) {
+          // Castle Siege flow
+          await castleSiege.initMatch(matchId);
+          io.to(`match:${matchId}`).emit('match:started', {
+            matchId,
+            startedAt: new Date().toISOString(),
+          });
+          setTimeout(() => {
+            io.to(`match:${matchId}`).emit('match:phase', { matchId, phase: 'collection' });
+            setTimeout(() => sendCSQuestion(io, matchId), 500);
+          }, 1000);
+        } else {
+          // Classic MCQ flow (4-player)
+          await matchEngine.startMatch(matchId);
+          io.to(`match:${matchId}`).emit('match:started', {
+            matchId,
+            startedAt: new Date().toISOString(),
+          });
+          setTimeout(() => broadcastMCQQuestion(io, matchId), 1000);
+        }
       }
     } catch (err) {
       ack?.({ ok: false, error: err.message });
@@ -83,6 +207,19 @@ const registerMatchHandlers = (io, socket) => {
 
   socket.on('match:answer', async ({ matchId, answer, timeMs }, ack) => {
     try {
+      const mode = matchModeCache.get(matchId);
+
+      if (isCastleSiege(mode)) {
+        const result = await castleSiege.submitAnswer(matchId, userId, answer, timeMs);
+        ack?.({ ok: result.ok });
+        if (result.ok && result.allAnswered) {
+          // Resolve early
+          setTimeout(() => resolveCSQuestion(io, matchId), 800);
+        }
+        return;
+      }
+
+      // Classic MCQ
       const result = await matchEngine.submitAnswer(matchId, userId, answer, timeMs);
       if (!result) {
         ack?.({ ok: false, error: 'Cannot submit answer' });
@@ -114,7 +251,6 @@ const registerMatchHandlers = (io, socket) => {
         });
       }
 
-      // Emit one event per newly eliminated player
       if (result.eliminated?.length) {
         result.eliminated.forEach((uid) => {
           io.to(`match:${matchId}`).emit('match:eliminated', { matchId, userId: uid });
@@ -123,7 +259,7 @@ const registerMatchHandlers = (io, socket) => {
 
       const state = await matchEngine.loadState(matchId);
       if (state && matchEngine.allAnswered(state)) {
-        setTimeout(() => advancePhase(io, matchId), 1000);
+        setTimeout(() => advanceMCQ(io, matchId), 1000);
       }
     } catch (err) {
       ack?.({ ok: false, error: err.message });
@@ -133,7 +269,6 @@ const registerMatchHandlers = (io, socket) => {
   // ── Rematch ──
   socket.on('match:rematch', async ({ matchId }, ack) => {
     try {
-      // Verify player was in this match
       const player = await MatchPlayer.findOne({ where: { matchId, userId } });
       if (!player) {
         ack?.({ ok: false, error: 'Not in this match' });
@@ -144,7 +279,6 @@ const registerMatchHandlers = (io, socket) => {
       set.add(userId);
       rematchRequests.set(matchId, set);
 
-      // Notify other players someone requested rematch
       const allPlayers = await MatchPlayer.findAll({ where: { matchId }, attributes: ['userId'] });
       allPlayers
         .filter((p) => p.userId !== userId)
@@ -152,7 +286,6 @@ const registerMatchHandlers = (io, socket) => {
 
       ack?.({ ok: true, acceptedCount: set.size, required: allPlayers.length });
 
-      // If all accepted → create new match
       if (set.size >= allPlayers.length) {
         const playerIds = allPlayers.map((p) => p.userId);
         const oldMatch = await Match.findByPk(matchId, { attributes: ['mode'] });
@@ -185,10 +318,16 @@ const registerMatchHandlers = (io, socket) => {
 
   socket.on('match:use-item', async ({ matchId, itemType }, ack) => {
     try {
+      // Items only in classic MCQ mode
+      const mode = matchModeCache.get(matchId);
+      if (isCastleSiege(mode)) {
+        ack?.({ ok: false, error: 'Items not available in Castle Siege' });
+        return;
+      }
+
       const result = await matchEngine.useItem(matchId, userId, itemType);
       ack?.({ ok: true, ...result });
 
-      // Broadcast to the user only (personal effects) or room (public effects)
       if (result.effect === 'shield_added') {
         io.to(`match:${matchId}`).emit('match:item-used', { userId, itemType, effect: result.effect });
       } else {
