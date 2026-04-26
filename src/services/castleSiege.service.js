@@ -187,7 +187,7 @@ const resolveQuestion = async (matchId) => {
   let attack = null;
 
   if (state.phase === 'collection') {
-    // Awards: exact+fastest=2, exact=1, closest wrong=1, else=0
+    // Awards: exact+fastest=3, exact=2, closest wrong=1, else=0
     const exacts = results.filter((r) => r.isExact);
     const fastestExact = exacts.length ? exacts.slice().sort((a, b) => a.timeMs - b.timeMs)[0] : null;
     const wrongs = results.filter((r) => !r.isExact);
@@ -200,7 +200,7 @@ const resolveQuestion = async (matchId) => {
       const fastest = fastestExact && r.userId === fastestExact.userId;
       const closest = !r.isExact && closestWrong && r.userId === closestWrong.userId && r.diff < 999;
 
-      if (r.isExact) pts = fastest ? 2 : 1;
+      if (r.isExact) pts = fastest ? 3 : 2;
       else if (closest) pts = 1;
 
       state.players[r.userId].power += pts;

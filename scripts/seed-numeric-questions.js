@@ -10,8 +10,8 @@ const { Question } = require('../src/models');
 
 const QUESTIONS = [
   // ── تواريخ مهمة ──
-  { text: 'في أي عام فُتحت مكة المكرمة؟', answer: '630', tolerance: 1, category: 'tarikh', difficulty: 'hard' },
-  { text: 'في أي عام كانت معركة بدر؟', answer: '624', tolerance: 1, category: 'tarikh', difficulty: 'hard' },
+  { text: 'في أي عام هجري فُتحت مكة المكرمة؟', answer: '8', tolerance: 0, category: 'tarikh', difficulty: 'medium' },
+  { text: 'في أي عام هجري كانت معركة بدر؟', answer: '2', tolerance: 0, category: 'tarikh', difficulty: 'medium' },
   { text: 'في أي عام بُنيت الكعبة (على يد إبراهيم - تقريبي قبل الميلاد)؟', answer: '2000', tolerance: 200, category: 'tarikh', difficulty: 'hard' },
   { text: 'في أي عام سقطت الأندلس؟', answer: '1492', tolerance: 0, category: 'tarikh', difficulty: 'hard' },
   { text: 'في أي عام قامت ثورة 23 يوليو في مصر؟', answer: '1952', tolerance: 0, category: 'tarikh', difficulty: 'medium' },
