@@ -36,12 +36,12 @@ const getAnswerType = (q) => {
 };
 
 // ── Question selection ──
-const pickInputQuestions = async (count) => {
+const pickInputQuestions = async (count, opts = {}) => {
+  // Phase 1 (collection): numeric only — required for "closest" scoring.
+  // Phase 2 (battle): mixed numeric + text input.
+  const types = opts.numericOnly ? ['numeric'] : ['numeric', 'quick_input'];
   return Question.findAll({
-    where: {
-      isActive: true,
-      type: { [Op.in]: ['numeric', 'quick_input'] },
-    },
+    where: { isActive: true, type: { [Op.in]: types } },
     order: sequelize.random(),
     limit: count,
   });
@@ -52,10 +52,13 @@ const initMatch = async (matchId) => {
   const players = await MatchPlayer.findAll({ where: { matchId }, attributes: ['userId'] });
   if (players.length < 2) throw new Error('1v1 يحتاج لاعبين');
 
-  const collection = await pickInputQuestions(COLLECTION_COUNT);
+  const collection = await pickInputQuestions(COLLECTION_COUNT, { numericOnly: true });
   const battle = await pickInputQuestions(BATTLE_COUNT);
-  if (collection.length < COLLECTION_COUNT || battle.length < BATTLE_COUNT) {
-    throw new Error('لا يوجد عدد كافٍ من أسئلة الإدخال (يلزم على الأقل 14)');
+  if (collection.length < COLLECTION_COUNT) {
+    throw new Error(`لا يوجد عدد كافٍ من الأسئلة الرقمية (المتاح: ${collection.length}/${COLLECTION_COUNT})`);
+  }
+  if (battle.length < BATTLE_COUNT) {
+    throw new Error(`لا يوجد عدد كافٍ من أسئلة الإدخال للمعركة (المتاح: ${battle.length}/${BATTLE_COUNT})`);
   }
 
   const playerState = {};
