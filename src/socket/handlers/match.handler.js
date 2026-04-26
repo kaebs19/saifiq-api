@@ -217,10 +217,9 @@ const registerMatchHandlers = (io, socket) => {
             matchId,
             startedAt: new Date().toISOString(),
           });
-          setTimeout(() => {
-            io.to(`match:${matchId}`).emit('match:phase', { matchId, phase: 'collection' });
-            setTimeout(() => sendCSQuestion(io, matchId), 500);
-          }, 1000);
+          // Per spec: match:started → first question = 0.5s
+          io.to(`match:${matchId}`).emit('match:phase', { matchId, phase: 'collection' });
+          setTimeout(() => sendCSQuestion(io, matchId), 500);
         } else {
           // Classic MCQ flow (4-player)
           await matchEngine.startMatch(matchId);
