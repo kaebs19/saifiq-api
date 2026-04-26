@@ -25,9 +25,14 @@ const Question = sequelize.define('Question', {
     type: DataTypes.JSONB,
     allowNull: true,
   },
-  // quick_input + numeric
+  // Spec-aligned answer type for iOS (auto-derived from `type`)
+  answerType: {
+    type: DataTypes.ENUM('multipleChoice', 'numericInput', 'textInput'),
+    defaultValue: 'multipleChoice',
+  },
+  // quick_input + numeric + spec answer
   correctAnswer: {
-    type: DataTypes.STRING,
+    type: DataTypes.TEXT,
     allowNull: true,
   },
   // numeric only
@@ -73,6 +78,14 @@ const Question = sequelize.define('Question', {
   },
 }, {
   timestamps: true,
+  hooks: {
+    beforeValidate: (q) => {
+      // Auto-derive answerType from type (keeps DB + API in sync)
+      if (q.type === 'numeric') q.answerType = 'numericInput';
+      else if (q.type === 'quick_input') q.answerType = 'textInput';
+      else if (q.type === 'mcq') q.answerType = 'multipleChoice';
+    },
+  },
 });
 
 module.exports = Question;

@@ -27,8 +27,9 @@ const loadState = async (matchId) => {
 };
 const clearState = async (matchId) => redis.del(STATE_KEY(matchId));
 
-// Map internal Question.type to spec's answerType
+// Use stored answerType column; fall back to type-based mapping for legacy
 const getAnswerType = (q) => {
+  if (q.answerType) return q.answerType;
   if (q.type === 'numeric') return 'numericInput';
   if (q.type === 'quick_input') return 'textInput';
   return 'multipleChoice';
