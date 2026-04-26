@@ -217,9 +217,9 @@ const registerMatchHandlers = (io, socket) => {
             matchId,
             startedAt: new Date().toISOString(),
           });
-          // Per spec: match:started → first question = 0.5s
           io.to(`match:${matchId}`).emit('match:phase', { matchId, phase: 'collection' });
-          setTimeout(() => sendCSQuestion(io, matchId), 500);
+          // Initial delay so iOS shows the "match starting" UI before first question
+          setTimeout(() => sendCSQuestion(io, matchId), castleSiege.INITIAL_DELAY_MS);
         } else {
           // Classic MCQ flow (4-player)
           await matchEngine.startMatch(matchId);

@@ -16,7 +16,10 @@ const BATTLE_COUNT = 10;
 const QUESTION_TIME_MS = 15000;
 const STARTING_POWER = 2;
 const PHASE_TRANSITION_MS = 4000;
-const QUESTION_GAP_MS = 2500;
+// Gap between question reveal and next question — long enough to read result/explanation
+const QUESTION_GAP_MS = 4000;
+// Initial delay between match:started and first question (iOS lobby → match transition)
+const INITIAL_DELAY_MS = 2000;
 
 // ── State helpers ──
 const saveState = async (matchId, state) =>
@@ -126,6 +129,20 @@ const getQuestionPayload = async (matchId) => {
   };
 };
 
+// ── Arabic feedback strings (helps iOS show clear UX without hardcoding) ──
+const feedbackText = ({ correct, closest, fastest, pts }) => {
+  if (correct && fastest) return `إجابة صحيحة وأنت الأسرع! +${pts}`;
+  if (correct) return `إجابة صحيحة +${pts}`;
+  if (closest) return `الأقرب من الإجابة +${pts}`;
+  return 'إجابة خاطئة';
+};
+
+const battleFeedbackText = ({ correct, isAttacker }) => {
+  if (correct && isAttacker) return 'إجابة صحيحة! ضربة على قلعة الخصم -1 HP';
+  if (correct) return 'إجابة صحيحة لكن الخصم أسرع';
+  return 'إجابة خاطئة';
+};
+
 // ── Submit answer ──
 const submitAnswer = async (matchId, userId, answer, timeMs) => {
   const state = await loadState(matchId);
@@ -216,6 +233,7 @@ const resolveQuestion = async (matchId) => {
         correctAnswer: correct,
         newScore: state.players[r.userId].score,
         newHP: state.players[r.userId].hp,
+        feedback: feedbackText({ correct: r.isExact, closest: !!closest, fastest: !!fastest, pts }),
       });
     }
   } else {
@@ -238,6 +256,7 @@ const resolveQuestion = async (matchId) => {
         correctAnswer: correct,
         newScore: state.players[r.userId].score,
         newHP: state.players[r.userId].hp,
+        feedback: battleFeedbackText({ correct: r.isExact, isAttacker }),
       });
     }
 
