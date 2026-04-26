@@ -1,5 +1,6 @@
 const matchmakingService = require('../../services/matchmaking.service');
 const { emitToUser } = require('../connectionManager');
+const { getMatchPlayers } = require('../matchHelpers');
 
 const registerQueueHandlers = (io, socket) => {
   const userId = socket.user.id;
@@ -12,9 +13,9 @@ const registerQueueHandlers = (io, socket) => {
 
       const result = await matchmakingService.tryMatchmake(mode);
       if (result) {
-        // Emit match:found to all matched players
+        const players = await getMatchPlayers(result.matchId);
         result.players.forEach((uid) => {
-          emitToUser(uid, 'match:found', { matchId: result.matchId, mode: result.mode });
+          emitToUser(uid, 'match:found', { matchId: result.matchId, mode: result.mode, players });
         });
       }
     } catch (err) {

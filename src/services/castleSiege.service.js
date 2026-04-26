@@ -269,8 +269,10 @@ const resolveQuestion = async (matchId) => {
 
   await saveState(matchId, state);
 
-  // Check elimination / battle-over
-  const eliminated = state.playerIds.filter((id) => state.players[id].hp === 0);
+  // Eliminations only meaningful in battle phase (collection HP=0 by default)
+  const eliminated = state.phase === 'battle'
+    ? state.playerIds.filter((id) => state.players[id].hp === 0)
+    : [];
   const onlyOneAlive = state.playerIds.filter((id) => state.players[id].hp > 0).length <= 1;
   const battleOverByElimination = state.phase === 'battle' && onlyOneAlive;
 

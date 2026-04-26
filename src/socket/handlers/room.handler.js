@@ -4,6 +4,7 @@ const friendService = require('../../services/friend.service');
 const notificationService = require('../../services/notification.service');
 const { User } = require('../../models');
 const { emitToUser, getSocketsForUser } = require('../connectionManager');
+const { getMatchPlayers } = require('../matchHelpers');
 
 // In-memory ready state per room: code → Set<userId>
 const readyState = new Map();
@@ -74,9 +75,9 @@ const registerRoomHandlers = (io, socket) => {
       if (room.players.length >= required) {
         const result = await roomService.tryStartMatch(code);
         if (result) {
-          // Notify all players — same event as random matchmaking
+          const players = await getMatchPlayers(result.matchId);
           result.players.forEach((uid) => {
-            emitToUser(uid, 'match:found', { matchId: result.matchId, mode: result.mode });
+            emitToUser(uid, 'match:found', { matchId: result.matchId, mode: result.mode, players });
           });
 
           // Clean up Socket.IO room
@@ -196,8 +197,9 @@ const registerRoomHandlers = (io, socket) => {
           try {
             const result = await roomService.tryStartMatch(room.code);
             if (result) {
+              const players = await getMatchPlayers(result.matchId);
               result.players.forEach((uid) => {
-                emitToUser(uid, 'match:found', { matchId: result.matchId, mode: result.mode });
+                emitToUser(uid, 'match:found', { matchId: result.matchId, mode: result.mode, players });
               });
               io.to(`room:${room.code}`).emit('room:match-starting', { matchId: result.matchId });
               io.in(`room:${room.code}`).socketsLeave(`room:${room.code}`);

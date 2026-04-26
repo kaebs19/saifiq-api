@@ -8,6 +8,11 @@ const startedMatches = new Set();
 const matchModeCache = new Map(); // matchId → mode
 const readyByMatch = new Map(); // matchId → Set<userId>
 
+// Per-match question timer (so we can cancel when all answer early)
+const questionTimers = new Map(); // matchId → Timeout
+// Per-match resolve guard (prevents double-resolve from race)
+const resolveGuard = new Set(); // matchId:phase:index strings
+
 // Rematch: matchId → Set<userId who accepted>
 const rematchRequests = new Map();
 
@@ -22,15 +27,31 @@ const sendCSQuestion = async (io, matchId) => {
   if (!payload) return;
   io.to(`match:${matchId}`).emit('match:question', payload);
 
-  // Auto-end question if timer expires
-  setTimeout(() => resolveCSQuestion(io, matchId), castleSiege.QUESTION_TIME_MS + 500);
+  // Cancel any leftover timer
+  if (questionTimers.has(matchId)) clearTimeout(questionTimers.get(matchId));
+
+  // Auto-end question when full timeLimit elapses (always — even if all answered early)
+  // We schedule at full duration; early-completion is handled separately via short delay
+  const t = setTimeout(() => resolveCSQuestion(io, matchId, 'timeout'), castleSiege.QUESTION_TIME_MS + 500);
+  questionTimers.set(matchId, t);
 };
 
-const resolveCSQuestion = async (io, matchId) => {
+const resolveCSQuestion = async (io, matchId, source = 'timeout') => {
   const state = await castleSiege.loadState(matchId);
   if (!state || state.phase === 'ended') return;
 
-  // Mark unanswered as wrong
+  // Idempotency guard — prevent double-resolve race between early-trigger + timer
+  const guardKey = `${matchId}:${state.phase}:${state.currentIndex}`;
+  if (resolveGuard.has(guardKey)) return;
+  resolveGuard.add(guardKey);
+
+  // Cancel pending timer (if early-resolved by allAnswered)
+  if (questionTimers.has(matchId)) {
+    clearTimeout(questionTimers.get(matchId));
+    questionTimers.delete(matchId);
+  }
+
+  // Mark unanswered as wrong (timeout case only)
   for (const id of state.playerIds) {
     if (!state.players[id].answered) {
       await castleSiege.submitAnswer(matchId, id, '', castleSiege.QUESTION_TIME_MS);
@@ -56,12 +77,14 @@ const resolveCSQuestion = async (io, matchId) => {
     }
   }
 
-  // Eliminations
-  for (const uid of result.eliminated) {
-    io.to(`match:${matchId}`).emit('match:eliminated', { matchId, userId: uid });
+  // Eliminations — ONLY in battle phase, never in collection (HP doesn't apply yet)
+  if (result.phase === 'battle') {
+    for (const uid of result.eliminated) {
+      io.to(`match:${matchId}`).emit('match:eliminated', { matchId, userId: uid });
+    }
   }
 
-  // If battle ended by elimination → finalize
+  // If battle ended by elimination → finalize after gap
   if (result.battleOver) {
     setTimeout(async () => {
       const updated = await castleSiege.loadState(matchId);
@@ -69,11 +92,11 @@ const resolveCSQuestion = async (io, matchId) => {
       const summary = await castleSiege.finalize(matchId, winnerId);
       if (summary) io.to(`match:${matchId}`).emit('match:ended', summary);
       cleanup(matchId);
-    }, 1500);
+    }, castleSiege.QUESTION_GAP_MS);
     return;
   }
 
-  // Otherwise advance after gap
+  // Otherwise wait QUESTION_GAP_MS (2.5s) so players see the result/attack, then next
   setTimeout(() => advanceCS(io, matchId), castleSiege.QUESTION_GAP_MS);
 };
 
@@ -112,6 +135,14 @@ const cleanup = (matchId) => {
   startedMatches.delete(matchId);
   readyByMatch.delete(matchId);
   matchModeCache.delete(matchId);
+  if (questionTimers.has(matchId)) {
+    clearTimeout(questionTimers.get(matchId));
+    questionTimers.delete(matchId);
+  }
+  // Drop any guard keys for this match
+  for (const k of Array.from(resolveGuard)) {
+    if (k.startsWith(`${matchId}:`)) resolveGuard.delete(k);
+  }
 };
 
 // ════════════════════════════════════════════
@@ -213,8 +244,10 @@ const registerMatchHandlers = (io, socket) => {
         const result = await castleSiege.submitAnswer(matchId, userId, answer, timeMs);
         ack?.({ ok: result.ok });
         if (result.ok && result.allAnswered) {
-          // Resolve early
-          setTimeout(() => resolveCSQuestion(io, matchId), 800);
+          // All players answered — resolve after a short delay so the last
+          // submitter sees their own UI react. Timer cancellation + guard
+          // ensure we don't double-resolve with the timeLimit fallback.
+          setTimeout(() => resolveCSQuestion(io, matchId, 'all-answered'), 800);
         }
         return;
       }
