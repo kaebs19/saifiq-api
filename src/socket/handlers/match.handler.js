@@ -350,13 +350,30 @@ const registerMatchHandlers = (io, socket) => {
 
   socket.on('match:use-item', async ({ matchId, itemType }, ack) => {
     try {
-      // Items only in classic MCQ mode
       const mode = matchModeCache.get(matchId);
+
+      // Castle Siege items (1v1)
       if (isCastleSiege(mode)) {
-        ack?.({ ok: false, error: 'Items not available in Castle Siege' });
+        const r = await castleSiege.useItem(matchId, userId, itemType);
+        ack?.({ ok: true, effect: r.effect, payload: r.payload });
+
+        // Always emit match:item-used to room (so opponent sees an icon/sound)
+        io.to(`match:${matchId}`).emit('match:item-used', { matchId, userId, itemType });
+
+        // Send the effect payload — to user, opponents, or whole room
+        const effectMsg = { matchId, userId, itemType, ...r.payload };
+        if (r.broadcastToRoom) {
+          io.to(`match:${matchId}`).emit('match:item-effect', effectMsg);
+        } else if (r.broadcastToOpponents) {
+          r.opponentIds.forEach((uid) => emitToUser(uid, 'match:item-effect', effectMsg));
+        } else {
+          // Default: only the user who used the item sees the effect
+          socket.emit('match:item-effect', effectMsg);
+        }
         return;
       }
 
+      // Classic MCQ flow (4-player)
       const result = await matchEngine.useItem(matchId, userId, itemType);
       ack?.({ ok: true, ...result });
 

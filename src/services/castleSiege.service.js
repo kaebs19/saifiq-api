@@ -6,7 +6,7 @@
  * State stored in Redis under cs:<matchId>
  */
 const { Op } = require('sequelize');
-const { Match, MatchPlayer, Question, User, Transaction, sequelize } = require('../models');
+const { Match, MatchPlayer, Question, User, UserItem, Transaction, sequelize } = require('../models');
 const { redis } = require('../config/redis');
 
 const STATE_KEY = (matchId) => `cs:${matchId}:state`;
@@ -40,9 +40,9 @@ const getAnswerType = (q) => {
 
 // ── Question selection ──
 const pickInputQuestions = async (count, opts = {}) => {
-  // Phase 1 (collection): numeric only — required for "closest" scoring.
-  // Phase 2 (battle): mixed numeric + text input.
-  const types = opts.numericOnly ? ['numeric'] : ['numeric', 'quick_input'];
+  // Both phases use numeric-only (textInput has no good iOS keyboard UX in battle).
+  // To re-enable text in Phase 2, pass { allowText: true }.
+  const types = opts.allowText ? ['numeric', 'quick_input'] : ['numeric'];
   return Question.findAll({
     where: { isActive: true, type: { [Op.in]: types } },
     order: sequelize.random(),
@@ -55,13 +55,14 @@ const initMatch = async (matchId) => {
   const players = await MatchPlayer.findAll({ where: { matchId }, attributes: ['userId'] });
   if (players.length < 2) throw new Error('1v1 يحتاج لاعبين');
 
-  const collection = await pickInputQuestions(COLLECTION_COUNT, { numericOnly: true });
+  // Both Phase 1 and Phase 2 use numeric-only questions for consistent UX
+  const collection = await pickInputQuestions(COLLECTION_COUNT);
   const battle = await pickInputQuestions(BATTLE_COUNT);
   if (collection.length < COLLECTION_COUNT) {
-    throw new Error(`لا يوجد عدد كافٍ من الأسئلة الرقمية (المتاح: ${collection.length}/${COLLECTION_COUNT})`);
+    throw new Error(`لا يوجد عدد كافٍ من الأسئلة الرقمية للمرحلة 1 (المتاح: ${collection.length}/${COLLECTION_COUNT})`);
   }
   if (battle.length < BATTLE_COUNT) {
-    throw new Error(`لا يوجد عدد كافٍ من أسئلة الإدخال للمعركة (المتاح: ${battle.length}/${BATTLE_COUNT})`);
+    throw new Error(`لا يوجد عدد كافٍ من الأسئلة الرقمية للمعركة (المتاح: ${battle.length}/${BATTLE_COUNT})`);
   }
 
   const playerState = {};
@@ -261,18 +262,22 @@ const resolveQuestion = async (matchId) => {
     }
 
     if (winner) {
+      const attackerState = state.players[winner.userId];
+      const damageAmount = attackerState.doubleDamageActive ? 2 : 1;
       const targets = state.playerIds.filter((id) => id !== winner.userId && state.players[id].hp > 0);
       const damageEvents = [];
       for (const targetId of targets) {
-        state.players[targetId].hp = Math.max(0, state.players[targetId].hp - 1);
+        state.players[targetId].hp = Math.max(0, state.players[targetId].hp - damageAmount);
         damageEvents.push({
           attackerId: winner.userId,
           targetId,
-          damage: 1,
+          damage: damageAmount,
           targetHp: state.players[targetId].hp,
         });
       }
       attack = { events: damageEvents };
+      // Consume double_damage after use
+      if (attackerState.doubleDamageActive) attackerState.doubleDamageActive = false;
     }
   }
 
@@ -415,6 +420,137 @@ const finalize = async (matchId, winnerId) => {
   };
 };
 
+// ════════════════════════════════════════════
+//  ITEMS — Castle Siege specific effects
+// ════════════════════════════════════════════
+
+const { GOLD_COSTS } = require('../config/constants');
+
+const CS_ITEM_TYPES = ['hint', 'reveal', 'freeze_time', 'double_damage', 'narrow_range', 'skip'];
+
+const isCSItem = (itemType) => CS_ITEM_TYPES.includes(itemType);
+
+/**
+ * Use an item in a Castle Siege match.
+ * Returns { effect, payload } — handler decides who to broadcast to.
+ */
+const useItem = async (matchId, userId, itemType) => {
+  const state = await loadState(matchId);
+  if (!state) throw new Error('المباراة غير موجودة');
+  if (state.phase === 'ended') throw new Error('انتهت المباراة');
+  if (!state.players[userId]) throw new Error('لست لاعباً في هذه المباراة');
+  if (!isCSItem(itemType)) throw new Error('هذه الأداة غير مدعومة في Castle Siege');
+
+  const cost = GOLD_COSTS[itemType];
+  if (!cost) throw new Error('سعر الأداة غير محدد');
+
+  // Check inventory FIRST (preferred), fall back to gold deduction
+  const userItem = await UserItem.findOne({ where: { userId, itemType } });
+  const hasInventory = userItem && userItem.quantity > 0;
+
+  await sequelize.transaction(async (t) => {
+    if (hasInventory) {
+      await userItem.update({ quantity: userItem.quantity - 1 }, { transaction: t });
+    } else {
+      const user = await User.findByPk(userId, { lock: true, transaction: t });
+      if (!user || user.gold < cost) throw new Error('رصيد غير كافٍ');
+      await user.update({ gold: user.gold - cost }, { transaction: t });
+      await Transaction.create({
+        userId, amount: -cost, type: 'item_use', currency: 'gold',
+        description: `استخدام ${itemType}`, matchId,
+      }, { transaction: t });
+    }
+  });
+
+  const list = state.questions[state.phase];
+  const q = list?.[state.currentIndex];
+  if (!q) throw new Error('لا يوجد سؤال نشط');
+
+  const opponentIds = state.playerIds.filter((id) => id !== userId);
+
+  // Build effect payload depending on item + question type
+  let payload = { itemType };
+  let broadcastToRoom = false;
+  let broadcastToOpponents = false;
+
+  switch (itemType) {
+    case 'hint': {
+      // For numeric: show approximate range around correct answer
+      if (q.answerType === 'numericInput') {
+        const correct = parseFloat(q.correctAnswer);
+        const span = Math.max(2, Math.abs(correct) * 0.2);
+        payload.rangeHint = { min: Math.round(correct - span), max: Math.round(correct + span) };
+      } else if (q.answerType === 'multipleChoice') {
+        // For MCQ: weighted hint (highest weight = correct)
+        const weights = {};
+        const correctIdx = q.correctOptionIdx;
+        const total = q.options?.length || 4;
+        for (let i = 0; i < total; i++) {
+          weights[String(i)] = i === correctIdx ? 70 : Math.floor(30 / (total - 1));
+        }
+        payload.optionWeights = weights;
+      } else {
+        // textInput: reveal first character
+        payload.revealedChars = String(q.correctAnswer).slice(0, 1);
+      }
+      break;
+    }
+
+    case 'reveal': {
+      if (q.answerType === 'multipleChoice') {
+        payload.correctIndex = q.correctOptionIdx;
+      } else {
+        const ans = String(q.correctAnswer);
+        payload.revealedDigit = ans.charAt(0);
+        payload.position = 0;
+      }
+      break;
+    }
+
+    case 'narrow_range': {
+      if (q.answerType !== 'numericInput') {
+        throw new Error('narrow_range يعمل فقط مع الأسئلة الرقمية');
+      }
+      const correct = parseFloat(q.correctAnswer);
+      // Narrower than 'hint' — ±10% min span ±5
+      const span = Math.max(5, Math.abs(correct) * 0.1);
+      payload.rangeHint = { min: Math.round(correct - span), max: Math.round(correct + span) };
+      break;
+    }
+
+    case 'freeze_time': {
+      // Sent to OPPONENTS — freezes their input for 5s on iOS side
+      payload.frozen = true;
+      payload.duration = 5;
+      broadcastToOpponents = true;
+      break;
+    }
+
+    case 'double_damage': {
+      // Persisted on state: next correct answer in battle does 2 HP
+      state.players[userId].doubleDamageActive = true;
+      await saveState(matchId, state);
+      payload.active = true;
+      payload.nextDamage = 2;
+      break;
+    }
+
+    case 'skip': {
+      // Mark this user as having "passed" — no points but no penalty
+      // (Implementation: count as wrong-far so phase resolves normally)
+      await submitAnswer(matchId, userId, '__skip__', QUESTION_TIME_MS / 2);
+      broadcastToRoom = true;
+      payload.skipped = true;
+      break;
+    }
+
+    default:
+      throw new Error(`أداة غير معروفة: ${itemType}`);
+  }
+
+  return { effect: itemType, payload, broadcastToRoom, broadcastToOpponents, opponentIds };
+};
+
 module.exports = {
   initMatch,
   getQuestionPayload,
@@ -423,9 +559,12 @@ module.exports = {
   advance,
   finalize,
   loadState,
+  useItem,
+  isCSItem,
   QUESTION_TIME_MS,
   PHASE_TRANSITION_MS,
   QUESTION_GAP_MS,
+  INITIAL_DELAY_MS,
   COLLECTION_COUNT,
   BATTLE_COUNT,
 };

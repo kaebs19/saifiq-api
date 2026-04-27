@@ -32,6 +32,7 @@ const ITEM_TYPES = {
   STEAL: 'steal',
   SKIP: 'skip',
   REVEAL: 'reveal',
+  NARROW_RANGE: 'narrow_range',
 };
 
 const ROUNDS = {
@@ -49,6 +50,7 @@ const GOLD_COSTS = {
   steal: 80,
   skip: 20,
   reveal: 90,
+  narrow_range: 50,
 };
 
 const ROLES = {

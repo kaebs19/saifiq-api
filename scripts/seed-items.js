@@ -12,6 +12,7 @@ const ITEM_DETAILS = {
   steal: { nameAr: '\u0633\u0631\u0642\u0629', descriptionAr: '\u064A\u0633\u0631\u0642 \u062C\u0648\u0627\u0647\u0631 \u0645\u0646 \u062E\u0635\u0645' },
   skip: { nameAr: '\u062A\u062E\u0637\u0649 \u0627\u0644\u0633\u0624\u0627\u0644', descriptionAr: '\u064A\u062A\u062C\u0627\u0648\u0632 \u0627\u0644\u0633\u0624\u0627\u0644 \u0627\u0644\u062D\u0627\u0644\u064A' },
   reveal: { nameAr: '\u0643\u0634\u0641 \u0627\u0644\u0625\u062C\u0627\u0628\u0629', descriptionAr: '\u064A\u0643\u0634\u0641 \u0627\u0644\u0625\u062C\u0627\u0628\u0629 \u0627\u0644\u0635\u062D\u064A\u062D\u0629' },
+  narrow_range: { nameAr: 'تضييق النطاق', descriptionAr: 'يعرض نطاقاً ضيقاً للإجابة الرقمية الصحيحة' },
 };
 
 const seed = async () => {
