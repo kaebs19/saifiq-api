@@ -12,7 +12,8 @@ const { redis } = require('../config/redis');
 const STATE_KEY = (matchId) => `cs:${matchId}:state`;
 const STATE_TTL = 3600;
 const COLLECTION_COUNT = 4;
-const BATTLE_COUNT = 10;
+const BATTLE_COUNT = 6;
+const TIEBREAKER_COUNT = 3;
 const QUESTION_TIME_MS = 15000;
 const STARTING_POWER = 2;
 const PHASE_TRANSITION_MS = 4000;
@@ -56,12 +57,17 @@ const initMatch = async (matchId) => {
   const collection = await pickQuestionsByType(COLLECTION_COUNT, ['numeric']);
   // Phase 2: mix of numeric input + MCQ (variety + speed)
   const battle = await pickQuestionsByType(BATTLE_COUNT, ['numeric', 'mcq']);
+  // Tiebreaker pool: numeric only (closest wins damage when MCQ tie)
+  const tiebreakers = await pickQuestionsByType(TIEBREAKER_COUNT, ['numeric']);
 
   if (collection.length < COLLECTION_COUNT) {
     throw new Error(`لا يوجد عدد كافٍ من الأسئلة الرقمية للمرحلة 1 (المتاح: ${collection.length}/${COLLECTION_COUNT})`);
   }
   if (battle.length < BATTLE_COUNT) {
     throw new Error(`لا يوجد عدد كافٍ من أسئلة المعركة (المتاح: ${battle.length}/${BATTLE_COUNT})`);
+  }
+  if (tiebreakers.length < TIEBREAKER_COUNT) {
+    throw new Error(`لا يوجد عدد كافٍ من أسئلة الحسم (المتاح: ${tiebreakers.length}/${TIEBREAKER_COUNT})`);
   }
 
   const playerState = {};
@@ -85,7 +91,12 @@ const initMatch = async (matchId) => {
     questions: {
       collection: collection.map(serializeQuestion),
       battle: battle.map(serializeQuestion),
+      tiebreaker: tiebreakers.map(serializeQuestion),
     },
+    // Tiebreaker state
+    inTiebreaker: false,           // currently resolving a tiebreaker
+    tiebreakerIndex: 0,            // which tiebreaker question is active
+    parentBattleIndex: null,       // battle Q that triggered the tiebreaker
     startedAt: Date.now(),
   };
 
@@ -117,6 +128,26 @@ const serializeQuestion = (q) => ({
 const getQuestionPayload = async (matchId) => {
   const state = await loadState(matchId);
   if (!state) return null;
+
+  // If in tiebreaker, serve the tiebreaker question (numeric only)
+  if (state.inTiebreaker) {
+    const tq = state.questions.tiebreaker?.[state.tiebreakerIndex];
+    if (!tq) return null;
+    const parentBattleQ = state.questions.battle?.[state.parentBattleIndex];
+    return {
+      matchId,
+      questionId: tq.id,
+      phase: 'battle',
+      answerType: 'numericInput',
+      text: tq.text,
+      isTiebreaker: true,
+      parentQuestionId: parentBattleQ?.id || null,
+      index: (state.parentBattleIndex ?? 0) + 1,
+      total: state.questions.battle.length,
+      timeLimit: tq.timeLimit,
+    };
+  }
+
   const list = state.questions[state.phase];
   const q = list?.[state.currentIndex];
   if (!q) return null;
@@ -254,46 +285,104 @@ const resolveQuestion = async (matchId) => {
       });
     }
   } else {
-    // Battle: fastest correct attacks the others
-    const exacts = results.filter((r) => r.isExact).slice().sort((a, b) => a.timeMs - b.timeMs);
-    const winner = exacts[0] || null;
+    // Battle phase
+    const exacts = results.filter((r) => r.isExact);
 
-    for (const r of results) {
-      const isAttacker = winner && r.userId === winner.userId;
-      const pts = isAttacker ? 1 : 0;
-      state.players[r.userId].score += pts;
+    // ⚖️ Tiebreaker trigger: MCQ + both answered correctly → no damage
+    if (q.answerType === 'multipleChoice' && !state.inTiebreaker && exacts.length === state.playerIds.length && state.playerIds.length >= 2) {
+      // Mark this battle Q as "needs tiebreaker"
+      state.parentBattleIndex = state.currentIndex;
+      state.inTiebreaker = true;
+      state.tiebreakerIndex = 0;
+      // Reset answered for tiebreaker
+      for (const id of state.playerIds) {
+        state.players[id].answered = false;
+        state.players[id].answer = null;
+        state.players[id].timeMs = null;
+      }
+      await saveState(matchId, state);
 
-      phaseResults.push({
-        userId: r.userId,
-        value: r.value,
-        correct: r.isExact,
-        closest: false,
-        fastest: isAttacker,
-        pointsAwarded: pts,
-        correctAnswer: correct,
-        newScore: state.players[r.userId].score,
-        newHP: state.players[r.userId].hp,
-        feedback: battleFeedbackText({ correct: r.isExact, isAttacker }),
-      });
-    }
-
-    if (winner) {
-      const attackerState = state.players[winner.userId];
-      const damageAmount = attackerState.doubleDamageActive ? 2 : 1;
-      const targets = state.playerIds.filter((id) => id !== winner.userId && state.players[id].hp > 0);
-      const damageEvents = [];
-      for (const targetId of targets) {
-        state.players[targetId].hp = Math.max(0, state.players[targetId].hp - damageAmount);
-        damageEvents.push({
-          attackerId: winner.userId,
-          targetId,
-          damage: damageAmount,
-          targetHp: state.players[targetId].hp,
+      for (const r of results) {
+        phaseResults.push({
+          userId: r.userId,
+          value: r.value,
+          correct: true,
+          closest: false,
+          fastest: false,
+          pointsAwarded: 0,
+          correctAnswer: correct,
+          newScore: state.players[r.userId].score,
+          newHP: state.players[r.userId].hp,
+          tieDetected: true,
+          feedback: 'الاثنين أجابا صح! سؤال حاسم قادم...',
         });
       }
-      attack = { events: damageEvents };
-      // Consume double_damage after use
-      if (attackerState.doubleDamageActive) attackerState.doubleDamageActive = false;
+      // Skip damage logic — handler will route to next tiebreaker question
+    } else {
+      // Normal battle resolution OR tiebreaker resolution by closest
+      let winner = null;
+
+      if (state.inTiebreaker) {
+        // Tiebreaker: closer wins (lowest diff, then fastest as tiebreak)
+        const sorted = results.slice().sort((a, b) => a.diff - b.diff || a.timeMs - b.timeMs);
+        // Only award if the winner is meaningfully better (not both unanswered)
+        if (sorted[0].diff !== Number.POSITIVE_INFINITY) {
+          winner = sorted[0];
+        }
+      } else {
+        // Standard battle: fastest correct attacks
+        const fastestExact = exacts.slice().sort((a, b) => a.timeMs - b.timeMs)[0] || null;
+        winner = fastestExact;
+      }
+
+      for (const r of results) {
+        const isAttacker = winner && r.userId === winner.userId;
+        const isWinningAnswer = state.inTiebreaker
+          ? isAttacker
+          : isAttacker; // both cases: winner gets the credit
+        const pts = isAttacker ? 1 : 0;
+        state.players[r.userId].score += pts;
+
+        phaseResults.push({
+          userId: r.userId,
+          value: r.value,
+          correct: r.isExact,
+          closest: state.inTiebreaker && isAttacker && !r.isExact,
+          fastest: isAttacker,
+          pointsAwarded: pts,
+          correctAnswer: correct,
+          newScore: state.players[r.userId].score,
+          newHP: state.players[r.userId].hp,
+          feedback: state.inTiebreaker
+            ? (isAttacker ? 'كنت الأقرب! ضربة على قلعة الخصم -1 HP' : 'الخصم كان الأقرب — ضربة على قلعتك')
+            : battleFeedbackText({ correct: r.isExact, isAttacker }),
+        });
+      }
+
+      if (winner) {
+        const attackerState = state.players[winner.userId];
+        const damageAmount = attackerState.doubleDamageActive ? 2 : 1;
+        const targets = state.playerIds.filter((id) => id !== winner.userId && state.players[id].hp > 0);
+        const damageEvents = [];
+        for (const targetId of targets) {
+          state.players[targetId].hp = Math.max(0, state.players[targetId].hp - damageAmount);
+          damageEvents.push({
+            attackerId: winner.userId,
+            targetId,
+            damage: damageAmount,
+            targetHp: state.players[targetId].hp,
+          });
+        }
+        attack = { events: damageEvents };
+        if (attackerState.doubleDamageActive) attackerState.doubleDamageActive = false;
+      }
+
+      // After tiebreaker resolves, exit tiebreaker mode (handler will advance to next battle Q)
+      if (state.inTiebreaker) {
+        state.inTiebreaker = false;
+        state.tiebreakerIndex++;
+        state.parentBattleIndex = null;
+      }
     }
   }
 
@@ -319,6 +408,9 @@ const resolveQuestion = async (matchId) => {
   const onlyOneAlive = state.playerIds.filter((id) => state.players[id].hp > 0).length <= 1;
   const battleOverByElimination = state.phase === 'battle' && onlyOneAlive;
 
+  // If tiebreaker just triggered (no damage), tell handler to send tiebreaker
+  const tiebreakerStarted = phaseResults.some((r) => r.tieDetected);
+
   return {
     questionId: q.id,
     phase: state.phase,
@@ -326,6 +418,7 @@ const resolveQuestion = async (matchId) => {
     attack,
     eliminated,
     battleOver: battleOverByElimination,
+    tiebreakerStarted,
   };
 };
 
@@ -341,7 +434,21 @@ const advance = async (matchId) => {
     state.players[id].timeMs = null;
   }
 
-  state.currentIndex++;
+  // If in tiebreaker mode, send the tiebreaker question (don't advance battle index)
+  if (state.inTiebreaker) {
+    if (state.tiebreakerIndex >= state.questions.tiebreaker.length) {
+      // Out of tiebreakers — exit and continue to next battle Q
+      state.inTiebreaker = false;
+      state.parentBattleIndex = null;
+      state.currentIndex++;
+    } else {
+      await saveState(matchId, state);
+      return { kind: 'tiebreaker-question' };
+    }
+  } else {
+    state.currentIndex++;
+  }
+
   const list = state.questions[state.phase];
 
   if (state.currentIndex < list.length) {

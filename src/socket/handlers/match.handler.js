@@ -104,7 +104,7 @@ const advanceCS = async (io, matchId) => {
   const step = await castleSiege.advance(matchId);
   if (!step) return;
 
-  if (step.kind === 'next-question') {
+  if (step.kind === 'next-question' || step.kind === 'tiebreaker-question') {
     await sendCSQuestion(io, matchId);
     return;
   }
