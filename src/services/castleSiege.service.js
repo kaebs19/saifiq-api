@@ -39,10 +39,7 @@ const getAnswerType = (q) => {
 };
 
 // ── Question selection ──
-const pickInputQuestions = async (count, opts = {}) => {
-  // Both phases use numeric-only (textInput has no good iOS keyboard UX in battle).
-  // To re-enable text in Phase 2, pass { allowText: true }.
-  const types = opts.allowText ? ['numeric', 'quick_input'] : ['numeric'];
+const pickQuestionsByType = async (count, types) => {
   return Question.findAll({
     where: { isActive: true, type: { [Op.in]: types } },
     order: sequelize.random(),
@@ -55,14 +52,16 @@ const initMatch = async (matchId) => {
   const players = await MatchPlayer.findAll({ where: { matchId }, attributes: ['userId'] });
   if (players.length < 2) throw new Error('1v1 يحتاج لاعبين');
 
-  // Both Phase 1 and Phase 2 use numeric-only questions for consistent UX
-  const collection = await pickInputQuestions(COLLECTION_COUNT);
-  const battle = await pickInputQuestions(BATTLE_COUNT);
+  // Phase 1: numeric only (closest-scoring requires numbers)
+  const collection = await pickQuestionsByType(COLLECTION_COUNT, ['numeric']);
+  // Phase 2: mix of numeric input + MCQ (variety + speed)
+  const battle = await pickQuestionsByType(BATTLE_COUNT, ['numeric', 'mcq']);
+
   if (collection.length < COLLECTION_COUNT) {
     throw new Error(`لا يوجد عدد كافٍ من الأسئلة الرقمية للمرحلة 1 (المتاح: ${collection.length}/${COLLECTION_COUNT})`);
   }
   if (battle.length < BATTLE_COUNT) {
-    throw new Error(`لا يوجد عدد كافٍ من الأسئلة الرقمية للمعركة (المتاح: ${battle.length}/${BATTLE_COUNT})`);
+    throw new Error(`لا يوجد عدد كافٍ من أسئلة المعركة (المتاح: ${battle.length}/${BATTLE_COUNT})`);
   }
 
   const playerState = {};
@@ -106,6 +105,9 @@ const serializeQuestion = (q) => ({
   answerType: getAnswerType(q),
   correctAnswer: q.correctAnswer,
   numericTolerance: q.numericTolerance,
+  // MCQ: store full options + correctOptionIdx
+  options: q.options,
+  correctOptionIdx: q.options ? q.options.findIndex((o) => o.isCorrect) : null,
   category: q.category,
   difficulty: q.difficulty,
   timeLimit: Math.round(QUESTION_TIME_MS / 1000),
@@ -118,7 +120,7 @@ const getQuestionPayload = async (matchId) => {
   const list = state.questions[state.phase];
   const q = list?.[state.currentIndex];
   if (!q) return null;
-  return {
+  const payload = {
     matchId,
     questionId: q.id,
     phase: state.phase,
@@ -128,6 +130,11 @@ const getQuestionPayload = async (matchId) => {
     total: list.length,
     timeLimit: q.timeLimit,
   };
+  // For MCQ: include options as string array (no isCorrect leak)
+  if (q.answerType === 'multipleChoice' && q.options) {
+    payload.options = q.options.map((o) => o.text);
+  }
+  return payload;
 };
 
 // ── Arabic feedback strings (helps iOS show clear UX without hardcoding) ──
@@ -171,7 +178,10 @@ const resolveQuestion = async (matchId) => {
   const q = list[state.currentIndex];
   if (!q) return null;
 
-  const correct = String(q.correctAnswer || '').trim();
+  // Determine the canonical correct answer (text vs MCQ index)
+  const correct = q.answerType === 'multipleChoice'
+    ? String(q.correctOptionIdx ?? '')
+    : String(q.correctAnswer || '').trim();
 
   // Compute per-player diff and exact-ness
   const results = state.playerIds.map((id) => {
@@ -187,7 +197,13 @@ const resolveQuestion = async (matchId) => {
         diff = Math.abs(num - correctNum);
         isExact = diff <= (q.numericTolerance || 0);
       }
+    } else if (q.answerType === 'multipleChoice') {
+      // MCQ: answer is the index (string or number)
+      const selectedIdx = parseInt(ans, 10);
+      isExact = Number.isInteger(selectedIdx) && selectedIdx === q.correctOptionIdx;
+      diff = isExact ? 0 : 999;
     } else {
+      // textInput
       isExact = ans.toLowerCase() === correct.toLowerCase();
       diff = isExact ? 0 : 999;
     }
