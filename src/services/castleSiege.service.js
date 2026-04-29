@@ -22,6 +22,12 @@ const QUESTION_GAP_MS = 4000;
 // Initial delay between match:started and first question (iOS lobby → match transition)
 const INITIAL_DELAY_MS = 2000;
 
+// 💰 Wager system — كل لاعب يدفع WAGER، الفائز يأخذ الـ POT
+const WAGER_AMOUNT = 50;     // ذهب يدفعه كل لاعب عند بدء المباراة
+const POT_AMOUNT = 100;      // الفائز يحصل على الـ pot (= 2 × wager)
+const WINNER_XP = 120;       // خبرة الفائز
+const LOSER_XP = 40;         // خبرة المشاركة (الخاسر)
+
 // ── State helpers ──
 const saveState = async (matchId, state) =>
   redis.set(STATE_KEY(matchId), JSON.stringify(state), 'EX', STATE_TTL);
@@ -71,6 +77,26 @@ const pickQuestionsByType = async (count, types, allowedAnswerTypes = null, excl
 const initMatch = async (matchId) => {
   const players = await MatchPlayer.findAll({ where: { matchId }, attributes: ['userId'] });
   if (players.length < 2) throw new Error('1v1 يحتاج لاعبين');
+
+  // 💰 خصم الـ wager من كل لاعب — لو ما عنده، نرفض المباراة
+  await sequelize.transaction(async (t) => {
+    for (const p of players) {
+      const user = await User.findByPk(p.userId, { lock: true, transaction: t });
+      if (!user) throw new Error(`اللاعب ${p.userId} غير موجود`);
+      if (user.gold < WAGER_AMOUNT) {
+        throw new Error(`اللاعب ${user.username || p.userId} يحتاج ${WAGER_AMOUNT} ذهب على الأقل للمباراة`);
+      }
+      await user.update({ gold: user.gold - WAGER_AMOUNT }, { transaction: t });
+      await Transaction.create({
+        userId: p.userId,
+        amount: -WAGER_AMOUNT,
+        type: 'match_wager',
+        currency: 'gold',
+        description: 'رهن مباراة Castle Siege',
+        matchId,
+      }, { transaction: t });
+    }
+  });
 
   // Phase 1: numeric only (closest-scoring requires numbers)
   const collection = await pickQuestionsByType(COLLECTION_COUNT, ['numeric'], ['numericInput']);
@@ -546,22 +572,28 @@ const finalize = async (matchId, winnerId) => {
         eliminatedAt: p.hp === 0 ? new Date() : null,
       }, { where: { matchId, userId }, transaction: t });
 
-      const reward = isWinner ? 50 : 10;
+      // 💰 الفائز يأخذ الـ pot، الخاسر خسر الـ wager بالفعل (في initMatch)
+      const goldReward = isWinner ? POT_AMOUNT : 0;
+      const xpReward = isWinner ? WINNER_XP : LOSER_XP;
+
       await User.update({
         wins: isWinner ? sequelize.literal('"wins" + 1') : sequelize.col('wins'),
         losses: !isWinner ? sequelize.literal('"losses" + 1') : sequelize.col('losses'),
         totalPoints: sequelize.literal(`"totalPoints" + ${p.score}`),
-        gold: sequelize.literal(`"gold" + ${reward}`),
+        gold: sequelize.literal(`"gold" + ${goldReward}`),
+        xp: sequelize.literal(`"xp" + ${xpReward}`),
       }, { where: { id: userId }, transaction: t });
 
-      await Transaction.create({
-        userId,
-        amount: reward,
-        type: 'win_reward',
-        currency: 'gold',
-        description: isWinner ? 'مكافأة فوز' : 'مكافأة مشاركة',
-        matchId,
-      }, { transaction: t });
+      if (goldReward > 0) {
+        await Transaction.create({
+          userId,
+          amount: goldReward,
+          type: 'win_reward',
+          currency: 'gold',
+          description: 'فوز بمباراة Castle Siege',
+          matchId,
+        }, { transaction: t });
+      }
     }
   });
 
@@ -578,7 +610,16 @@ const finalize = async (matchId, winnerId) => {
     winnerId,
     scores: scoresSnap,
     hp: hpSnap,
-    rewards: { gold: winnerId ? 50 : 10, xp: winnerId ? (scoresSnap[winnerId] || 0) : 0 },
+    rewards: {
+      // معلومات الرهن (iOS يحسب net حسب الفائز)
+      wager: WAGER_AMOUNT,
+      pot: POT_AMOUNT,
+      winnerXp: WINNER_XP,
+      loserXp: LOSER_XP,
+      // legacy compatibility
+      gold: winnerId ? POT_AMOUNT : 0,
+      xp: winnerId ? WINNER_XP : LOSER_XP,
+    },
   };
 };
 
