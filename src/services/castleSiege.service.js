@@ -365,12 +365,24 @@ const resolveQuestion = async (matchId) => {
         const targets = state.playerIds.filter((id) => id !== winner.userId && state.players[id].hp > 0);
         const damageEvents = [];
         for (const targetId of targets) {
-          state.players[targetId].hp = Math.max(0, state.players[targetId].hp - damageAmount);
+          const targetState = state.players[targetId];
+          let actualDamage = damageAmount;
+          let blockedByShield = false;
+
+          // 🛡 Shield يمتص الضربة الأولى ثم يُستهلك
+          if (targetState.shieldActive) {
+            actualDamage = 0;
+            blockedByShield = true;
+            targetState.shieldActive = false;
+          }
+
+          targetState.hp = Math.max(0, targetState.hp - actualDamage);
           damageEvents.push({
             attackerId: winner.userId,
             targetId,
-            damage: damageAmount,
-            targetHp: state.players[targetId].hp,
+            damage: actualDamage,
+            targetHp: targetState.hp,
+            blockedByShield,
           });
         }
         attack = { events: damageEvents };
@@ -549,7 +561,7 @@ const finalize = async (matchId, winnerId) => {
 
 const { GOLD_COSTS } = require('../config/constants');
 
-const CS_ITEM_TYPES = ['hint', 'reveal', 'freeze_time', 'double_damage', 'narrow_range', 'skip'];
+const CS_ITEM_TYPES = ['hint', 'reveal', 'freeze_time', 'double_damage', 'narrow_range', 'skip', 'eliminate_two', 'shield'];
 
 const isCSItem = (itemType) => CS_ITEM_TYPES.includes(itemType);
 
@@ -664,6 +676,32 @@ const useItem = async (matchId, userId, itemType) => {
       await submitAnswer(matchId, userId, '__skip__', QUESTION_TIME_MS / 2);
       broadcastToRoom = true;
       payload.skipped = true;
+      break;
+    }
+
+    case 'eliminate_two': {
+      // 50/50 — يحذف خيارَين خاطئَين عشوائياً (MCQ فقط)
+      if (q.answerType !== 'multipleChoice') {
+        throw new Error('حذف الإجابتين يعمل فقط مع أسئلة الخيارات');
+      }
+      const total = q.options?.length || 4;
+      const correctIdx = q.correctOptionIdx;
+      const wrongIndices = [];
+      for (let i = 0; i < total; i++) {
+        if (i !== correctIdx) wrongIndices.push(i);
+      }
+      // اختر اثنين عشوائياً
+      const shuffled = wrongIndices.sort(() => Math.random() - 0.5);
+      payload.disabledIndices = shuffled.slice(0, 2);
+      break;
+    }
+
+    case 'shield': {
+      // درع — يحمي اللاعب من الضربة التالية في battle
+      state.players[userId].shieldActive = true;
+      await saveState(matchId, state);
+      payload.shieldActive = true;
+      payload.duration = 10; // ثانية
       break;
     }
 
