@@ -10,7 +10,7 @@
  */
 
 require('dotenv').config();
-const { sequelize } = require('../src/config/database');
+const { sequelize } = require('../src/config/db');
 
 (async () => {
   try {
