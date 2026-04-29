@@ -40,9 +40,23 @@ const getAnswerType = (q) => {
 };
 
 // ── Question selection ──
-const pickQuestionsByType = async (count, types) => {
+const pickQuestionsByType = async (count, types, allowedAnswerTypes = null) => {
+  const where = { isActive: true, type: { [Op.in]: types } };
+
+  // ⚠️ استثناء أسئلة لها answerType مخالف (مثل type=mcq لكن answerType=textInput)
+  if (allowedAnswerTypes) {
+    where[Op.and] = [
+      {
+        [Op.or]: [
+          { answerType: { [Op.in]: allowedAnswerTypes } },
+          { answerType: null }, // legacy — fallback عبر getAnswerType
+        ],
+      },
+    ];
+  }
+
   return Question.findAll({
-    where: { isActive: true, type: { [Op.in]: types } },
+    where,
     order: sequelize.random(),
     limit: count,
   });
@@ -54,11 +68,11 @@ const initMatch = async (matchId) => {
   if (players.length < 2) throw new Error('1v1 يحتاج لاعبين');
 
   // Phase 1: numeric only (closest-scoring requires numbers)
-  const collection = await pickQuestionsByType(COLLECTION_COUNT, ['numeric']);
-  // Phase 2: mix of numeric input + MCQ (variety + speed)
-  const battle = await pickQuestionsByType(BATTLE_COUNT, ['numeric', 'mcq']);
+  const collection = await pickQuestionsByType(COLLECTION_COUNT, ['numeric'], ['numericInput']);
+  // Phase 2: mix of numeric input + MCQ ONLY (لا textInput)
+  const battle = await pickQuestionsByType(BATTLE_COUNT, ['numeric', 'mcq'], ['numericInput', 'multipleChoice']);
   // Tiebreaker pool: numeric only (closest wins damage when MCQ tie)
-  const tiebreakers = await pickQuestionsByType(TIEBREAKER_COUNT, ['numeric']);
+  const tiebreakers = await pickQuestionsByType(TIEBREAKER_COUNT, ['numeric'], ['numericInput']);
 
   if (collection.length < COLLECTION_COUNT) {
     throw new Error(`لا يوجد عدد كافٍ من الأسئلة الرقمية للمرحلة 1 (المتاح: ${collection.length}/${COLLECTION_COUNT})`);
