@@ -40,7 +40,7 @@ const getAnswerType = (q) => {
 };
 
 // ── Question selection ──
-const pickQuestionsByType = async (count, types, allowedAnswerTypes = null) => {
+const pickQuestionsByType = async (count, types, allowedAnswerTypes = null, excludeIds = []) => {
   const where = { isActive: true, type: { [Op.in]: types } };
 
   // ⚠️ استثناء أسئلة لها answerType مخالف (مثل type=mcq لكن answerType=textInput)
@@ -53,6 +53,11 @@ const pickQuestionsByType = async (count, types, allowedAnswerTypes = null) => {
         ],
       },
     ];
+  }
+
+  // 🚫 منع التكرار — استثنِ الأسئلة المستخدمة سابقاً في هذه المباراة
+  if (excludeIds.length > 0) {
+    where.id = { [Op.notIn]: excludeIds };
   }
 
   return Question.findAll({
@@ -69,10 +74,18 @@ const initMatch = async (matchId) => {
 
   // Phase 1: numeric only (closest-scoring requires numbers)
   const collection = await pickQuestionsByType(COLLECTION_COUNT, ['numeric'], ['numericInput']);
-  // Phase 2: mix of numeric input + MCQ ONLY (لا textInput)
-  const battle = await pickQuestionsByType(BATTLE_COUNT, ['numeric', 'mcq'], ['numericInput', 'multipleChoice']);
-  // Tiebreaker pool: numeric only (closest wins damage when MCQ tie)
-  const tiebreakers = await pickQuestionsByType(TIEBREAKER_COUNT, ['numeric'], ['numericInput']);
+  const usedIds = collection.map((q) => q.id);
+
+  // Phase 2: mix of numeric input + MCQ ONLY — استثنِ أسئلة Phase 1
+  const battle = await pickQuestionsByType(
+    BATTLE_COUNT, ['numeric', 'mcq'], ['numericInput', 'multipleChoice'], usedIds
+  );
+  usedIds.push(...battle.map((q) => q.id));
+
+  // Tiebreaker pool — استثنِ كل أسئلة المرحلتَين السابقتَين
+  const tiebreakers = await pickQuestionsByType(
+    TIEBREAKER_COUNT, ['numeric'], ['numericInput'], usedIds
+  );
 
   if (collection.length < COLLECTION_COUNT) {
     throw new Error(`لا يوجد عدد كافٍ من الأسئلة الرقمية للمرحلة 1 (المتاح: ${collection.length}/${COLLECTION_COUNT})`);
