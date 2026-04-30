@@ -40,8 +40,11 @@ const resolveCSQuestion = async (io, matchId, source = 'timeout') => {
   const state = await castleSiege.loadState(matchId);
   if (!state || state.phase === 'ended') return;
 
-  // Idempotency guard — prevent double-resolve race between early-trigger + timer
-  const guardKey = `${matchId}:${state.phase}:${state.currentIndex}`;
+  // Idempotency guard — prevent double-resolve race between early-trigger + timer.
+  // Tiebreaker re-uses currentIndex (parent battle Q), so include tiebreakerIndex
+  // to give each tiebreaker resolution its own guard slot.
+  const tbSuffix = state.inTiebreaker ? `:tb${state.tiebreakerIndex}` : '';
+  const guardKey = `${matchId}:${state.phase}:${state.currentIndex}${tbSuffix}`;
   if (resolveGuard.has(guardKey)) return;
   resolveGuard.add(guardKey);
 
