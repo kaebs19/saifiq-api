@@ -16,6 +16,21 @@ const resolveGuard = new Set(); // matchId:phase:index strings
 // Rematch: matchId → Set<userId who accepted>
 const rematchRequests = new Map();
 
+// Quick-message cooldown per user (anti-spam)
+const QUICK_MSG_COOLDOWN_MS = 2000;
+const quickMsgLastAt = new Map(); // userId → epoch ms
+
+// Whitelisted preset keys (iOS sends key, we look up the localized text on-device)
+const ALLOWED_PRESET_KEYS = new Set([
+  'salam', 'goodLuck', 'wellPlayed', 'gg', 'thanksMatch',
+  'iChallengeYou', 'beatMeIfYouCan', 'iWillWin', 'tooEasy', 'focus',
+  'beCareful', 'haha', 'sad', 'didntExpect', 'comeOn',
+]);
+
+const ALLOWED_EMOJIS = new Set([
+  '👍', '😂', '🔥', '💪', '👏', '🎉', '😮', '⚡', '😢', '👀', '⚔️', '🏆',
+]);
+
 const isCastleSiege = (mode) => mode === '1v1';
 
 // ════════════════════════════════════════════
@@ -385,6 +400,60 @@ const registerMatchHandlers = (io, socket) => {
       } else {
         socket.emit('match:item-effect', result);
       }
+    } catch (err) {
+      ack?.({ ok: false, error: err.message });
+    }
+  });
+
+  // Quick chat (preset messages + emoji reactions)
+  socket.on('match:quick-message', async ({ matchId, kind, value }, ack) => {
+    try {
+      if (!matchId || !kind || !value) {
+        ack?.({ ok: false, error: 'invalid_payload' });
+        return;
+      }
+
+      // Validate kind + value
+      if (kind === 'preset' && !ALLOWED_PRESET_KEYS.has(value)) {
+        ack?.({ ok: false, error: 'invalid_preset' });
+        return;
+      }
+      if (kind === 'emoji' && !ALLOWED_EMOJIS.has(value)) {
+        ack?.({ ok: false, error: 'invalid_emoji' });
+        return;
+      }
+      if (kind !== 'preset' && kind !== 'emoji') {
+        ack?.({ ok: false, error: 'invalid_kind' });
+        return;
+      }
+
+      // Cooldown
+      const now = Date.now();
+      const last = quickMsgLastAt.get(userId) || 0;
+      if (now - last < QUICK_MSG_COOLDOWN_MS) {
+        ack?.({ ok: false, error: 'cooldown', retryInMs: QUICK_MSG_COOLDOWN_MS - (now - last) });
+        return;
+      }
+
+      // Verify user is actually in this match
+      const player = await MatchPlayer.findOne({ where: { matchId, userId } });
+      if (!player) {
+        ack?.({ ok: false, error: 'not_in_match' });
+        return;
+      }
+
+      quickMsgLastAt.set(userId, now);
+
+      // Broadcast to all players in match (including sender for echo confirmation)
+      io.to(`match:${matchId}`).emit('match:quick-message-received', {
+        matchId,
+        fromUserId: userId,
+        kind,
+        value,
+        sentAt: now,
+      });
+
+      ack?.({ ok: true });
     } catch (err) {
       ack?.({ ok: false, error: err.message });
     }
