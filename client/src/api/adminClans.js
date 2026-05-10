@@ -9,4 +9,11 @@ export const adminClansApi = {
   getMessages: (id, params) => api.get(`/clans/${id}/chat`, { params }).then((r) => r.data.data),
   getMemberLeaderboard: (id) => api.get(`/clans/${id}/leaderboard`).then((r) => r.data.data),
   delete: (id) => api.delete(`/clans/${id}`).then((r) => r.data.data),
+  update: (id, data) => api.patch(`/clans/${id}`, data).then((r) => r.data.data),
+  clearChat: (id) => api.delete(`/clans/${id}/chat`).then((r) => r.data),
+  deleteMessage: (clanId, messageId) =>
+    api.delete(`/clans/${clanId}/chat/${messageId}`).then((r) => r.data),
+  getReports: (id) => api.get(`/clans/${id}/reports`).then((r) => r.data.data),
+  resolveReport: (clanId, reportId, action) =>
+    api.post(`/clans/${clanId}/reports/${reportId}/resolve`, { action }).then((r) => r.data),
 };

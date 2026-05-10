@@ -43,9 +43,45 @@ export function useClanMessages(id) {
   });
 }
 
+export function useClanReports(id) {
+  return useQuery({
+    queryKey: [...KEY, 'reports', id],
+    queryFn: () => adminClansApi.getReports(id),
+    enabled: !!id,
+  });
+}
+
 export function useDeleteClan() {
   return useApiMutation(
     (id) => adminClansApi.delete(id),
     { invalidateKey: KEY, success: 'تم حذف العشيرة' }
+  );
+}
+
+export function useUpdateClan(id) {
+  return useApiMutation(
+    (data) => adminClansApi.update(id, data),
+    { invalidateKey: [...KEY, 'detail', id], success: 'تم تحديث العشيرة' }
+  );
+}
+
+export function useClearClanChat(id) {
+  return useApiMutation(
+    () => adminClansApi.clearChat(id),
+    { invalidateKey: [...KEY, 'messages', id], success: 'تم مسح جميع الرسائل' }
+  );
+}
+
+export function useDeleteClanMessage(clanId) {
+  return useApiMutation(
+    (messageId) => adminClansApi.deleteMessage(clanId, messageId),
+    { invalidateKey: [...KEY, 'messages', clanId], success: 'تم حذف الرسالة' }
+  );
+}
+
+export function useResolveReport(clanId) {
+  return useApiMutation(
+    ({ reportId, action }) => adminClansApi.resolveReport(clanId, reportId, action),
+    { invalidateKey: [...KEY, 'reports', clanId], success: 'تم معالجة البلاغ' }
   );
 }
