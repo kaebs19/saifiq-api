@@ -14,7 +14,8 @@ const getClan = asyncHandler(async (req, res) => {
 });
 
 const updateClan = asyncHandler(async (req, res) => {
-  const clan = await clanService.updateClan(req.user.id, req.params.id, req.body);
+  const isAdmin = req.user.role === 'admin';
+  const clan = await clanService.updateClan(req.user.id, req.params.id, req.body, { isAdmin });
   ApiResponse.success(res, clan, 'تم التحديث');
 });
 
@@ -119,12 +120,14 @@ const getMemberLeaderboard = asyncHandler(async (req, res) => {
 
 // ── Moderation ──
 const deleteMessage = asyncHandler(async (req, res) => {
-  await clanService.deleteMessage(req.user.id, req.params.id, req.params.mid);
+  const isAdmin = req.user.role === 'admin';
+  await clanService.deleteMessage(req.user.id, req.params.id, req.params.mid, { isAdmin });
   ApiResponse.success(res, null, 'تم حذف الرسالة');
 });
 
 const clearChatMessages = asyncHandler(async (req, res) => {
-  await clanService.clearChat(req.user.id, req.params.id);
+  const isAdmin = req.user.role === 'admin';
+  await clanService.clearChat(req.user.id, req.params.id, { isAdmin });
   ApiResponse.success(res, null, 'تم مسح الشات');
 });
 
@@ -162,12 +165,14 @@ const getTreasuryHistory = asyncHandler(async (req, res) => {
 
 // ── Reports ──
 const getReports = asyncHandler(async (req, res) => {
-  const reports = await clanService.getReports(req.user.id, req.params.id);
+  const isAdmin = req.user.role === 'admin';
+  const reports = await clanService.getReports(req.user.id, req.params.id, { isAdmin });
   ApiResponse.success(res, reports);
 });
 
 const resolveReport = asyncHandler(async (req, res) => {
-  await clanService.resolveReport(req.user.id, req.params.id, req.params.rid, req.body.action);
+  const isAdmin = req.user.role === 'admin';
+  await clanService.resolveReport(req.user.id, req.params.id, req.params.rid, req.body.action, { isAdmin });
   ApiResponse.success(res, null, 'تم معالجة البلاغ');
 });
 

@@ -85,8 +85,8 @@ const getClan = async (clanId, userId = null) => {
   return { ...clan.toJSON(), memberCount, myRole };
 };
 
-const updateClan = async (userId, clanId, data) => {
-  await assertRole(userId, clanId, 'owner', 'admin');
+const updateClan = async (userId, clanId, data, { isAdmin = false } = {}) => {
+  if (!isAdmin) await assertRole(userId, clanId, 'owner', 'admin');
   const clan = await Clan.findByPk(clanId);
   if (!clan) throw new AppError('العشيرة غير موجودة', 404);
 
@@ -432,14 +432,15 @@ const getMemberLeaderboard = async (clanId) => {
 
 // ── Delete Message ──
 
-const deleteMessage = async (userId, clanId, messageId) => {
-  const member = await assertMember(userId, clanId);
+const deleteMessage = async (userId, clanId, messageId, { isAdmin = false } = {}) => {
   const message = await ClanMessage.findOne({ where: { id: messageId, clanId } });
   if (!message) throw new AppError('الرسالة غير موجودة', 404);
 
-  // Author can delete own, admin/owner can delete any
-  if (message.userId !== userId && !['admin', 'owner'].includes(member.role)) {
-    throw new AppError('ليس لديك صلاحية حذف هذه الرسالة', 403);
+  if (!isAdmin) {
+    const member = await assertMember(userId, clanId);
+    if (message.userId !== userId && !['admin', 'owner'].includes(member.role)) {
+      throw new AppError('ليس لديك صلاحية حذف هذه الرسالة', 403);
+    }
   }
 
   await message.destroy();
@@ -448,8 +449,8 @@ const deleteMessage = async (userId, clanId, messageId) => {
 
 // ── Clear Chat ──
 
-const clearChat = async (userId, clanId) => {
-  await assertRole(userId, clanId, 'owner');
+const clearChat = async (userId, clanId, { isAdmin = false } = {}) => {
+  if (!isAdmin) await assertRole(userId, clanId, 'owner');
   await ClanMessage.destroy({ where: { clanId } });
   emitToClan(clanId, 'clan:chat-cleared', { clanId });
 };
@@ -489,8 +490,8 @@ const unmuteMember = async (userId, clanId, targetId) => {
 
 // ── Reports (violations) ──
 
-const getReports = async (userId, clanId) => {
-  await assertRole(userId, clanId, 'owner', 'admin');
+const getReports = async (userId, clanId, { isAdmin = false } = {}) => {
+  if (!isAdmin) await assertRole(userId, clanId, 'owner', 'admin');
   const reports = await MessageReport.findAll({
     where: { status: 'pending' },
     include: [
@@ -509,8 +510,8 @@ const getReports = async (userId, clanId) => {
   return reports;
 };
 
-const resolveReport = async (userId, clanId, reportId, action) => {
-  await assertRole(userId, clanId, 'owner', 'admin');
+const resolveReport = async (userId, clanId, reportId, action, { isAdmin = false } = {}) => {
+  if (!isAdmin) await assertRole(userId, clanId, 'owner', 'admin');
 
   const report = await MessageReport.findOne({
     where: { id: reportId },
