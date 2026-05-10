@@ -487,6 +487,49 @@ const unmuteMember = async (userId, clanId, targetId) => {
   emitToClan(clanId, 'clan:member-role-changed', { clanId, userId: targetId, newRole: target.role });
 };
 
+// ── Reports (violations) ──
+
+const getReports = async (userId, clanId) => {
+  await assertRole(userId, clanId, 'owner', 'admin');
+  const reports = await MessageReport.findAll({
+    where: { status: 'pending' },
+    include: [
+      {
+        model: ClanMessage,
+        required: true,
+        where: { clanId },
+        attributes: ['id', 'content', 'type', 'createdAt'],
+        include: [{ model: User, attributes: ['id', 'username', 'avatarUrl'] }],
+      },
+      { model: User, as: 'reporter', attributes: ['id', 'username'] },
+    ],
+    order: [['createdAt', 'DESC']],
+    limit: 50,
+  });
+  return reports;
+};
+
+const resolveReport = async (userId, clanId, reportId, action) => {
+  await assertRole(userId, clanId, 'owner', 'admin');
+
+  const report = await MessageReport.findOne({
+    where: { id: reportId },
+    include: [{ model: ClanMessage, where: { clanId }, required: true }],
+  });
+  if (!report) throw new AppError('البلاغ غير موجود', 404);
+
+  const newStatus = action === 'dismiss' ? 'dismissed' : 'reviewed';
+  await report.update({ status: newStatus });
+
+  if (action === 'delete') {
+    const message = await ClanMessage.findOne({ where: { id: report.messageId, clanId } });
+    if (message) {
+      await message.destroy();
+      emitToClan(clanId, 'clan:message-deleted', { clanId, messageId: report.messageId });
+    }
+  }
+};
+
 // ── Event Logger ──
 
 const logEvent = async (clanId, type, actorId = null, targetId = null, metadata = {}) => {
@@ -600,5 +643,6 @@ module.exports = {
   deleteMessage, clearChat, reportMessage, muteMember, unmuteMember,
   getClanLeaderboard, getMemberLeaderboard,
   logEvent, getEvents, donate, getTreasuryHistory, getCurrentWar,
+  getReports, resolveReport,
   checkLevelUp,
 };

@@ -160,6 +160,17 @@ const getTreasuryHistory = asyncHandler(async (req, res) => {
   ApiResponse.success(res, history);
 });
 
+// ── Reports ──
+const getReports = asyncHandler(async (req, res) => {
+  const reports = await clanService.getReports(req.user.id, req.params.id);
+  ApiResponse.success(res, reports);
+});
+
+const resolveReport = asyncHandler(async (req, res) => {
+  await clanService.resolveReport(req.user.id, req.params.id, req.params.rid, req.body.action);
+  ApiResponse.success(res, null, 'تم معالجة البلاغ');
+});
+
 // ── Wars ──
 const getCurrentWar = asyncHandler(async (req, res) => {
   const war = await clanService.getCurrentWar(req.user.id, req.params.id);
@@ -173,6 +184,7 @@ module.exports = {
   acceptRequest, rejectRequest, getMembers, getPendingRequests,
   sendMessage, sendGameCode, getMessages, pinMessage,
   deleteMessage, clearChatMessages, reportMessage, muteMember, unmuteMember,
+  getReports, resolveReport,
   getEvents, donateTreasury, getTreasuryHistory, getCurrentWar,
   getClanLeaderboard, getMemberLeaderboard,
 };

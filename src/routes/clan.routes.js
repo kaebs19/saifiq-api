@@ -41,6 +41,10 @@ router.delete('/:id/chat/:mid', c.deleteMessage);
 router.delete('/:id/chat', c.clearChatMessages);
 router.post('/:id/chat/:mid/report', validate(reportSchema), c.reportMessage);
 
+// Reports (violations)
+router.get('/:id/reports', c.getReports);
+router.post('/:id/reports/:rid/resolve', c.resolveReport);
+
 // Events / History
 router.get('/:id/events', c.getEvents);
 
