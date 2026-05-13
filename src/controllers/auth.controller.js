@@ -3,6 +3,11 @@ const passwordResetService = require('../services/passwordReset.service');
 const ApiResponse = require('../utils/ApiResponse');
 const asyncHandler = require('../middleware/asyncHandler');
 
+const deleteAccount = asyncHandler(async (req, res) => {
+  await authService.deleteAccount(req.user.id);
+  ApiResponse.success(res, null, 'تم حذف الحساب بنجاح');
+});
+
 const adminLogin = asyncHandler(async (req, res) => {
   const { email, password } = req.body;
   const data = await authService.adminLogin(email, password);
@@ -65,6 +70,6 @@ const resetPassword = asyncHandler(async (req, res) => {
 
 module.exports = {
   adminLogin, register, login, googleSignIn, appleSignIn, me,
-  updateProfile, uploadAvatar,
+  updateProfile, uploadAvatar, deleteAccount,
   forgotPassword, verifyResetCode, resetPassword,
 };

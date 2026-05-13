@@ -258,6 +258,14 @@ const uploadAvatar = async (userId, file) => {
   return { avatarUrl };
 };
 
+// ── Delete Account ──
+
+const deleteAccount = async (userId) => {
+  const user = await User.findByPk(userId);
+  if (!user) throw new AppError('المستخدم غير موجود', 404);
+  await user.destroy();
+};
+
 // ── Utils ──
 
 const ensureUniqueUsername = async (base) => {
@@ -270,4 +278,4 @@ const ensureUniqueUsername = async (base) => {
   return username;
 };
 
-module.exports = { adminLogin, register, login, googleLogin, appleLogin, getMe, updateProfile, uploadAvatar };
+module.exports = { adminLogin, register, login, googleLogin, appleLogin, getMe, updateProfile, uploadAvatar, deleteAccount };

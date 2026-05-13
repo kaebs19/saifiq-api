@@ -1,7 +1,7 @@
 const { Router } = require('express');
 const {
   adminLogin, register, login, googleSignIn, appleSignIn, me,
-  updateProfile, uploadAvatar,
+  updateProfile, uploadAvatar, deleteAccount,
   forgotPassword, verifyResetCode, resetPassword,
 } = require('../controllers/auth.controller');
 const { authenticate } = require('../middleware/auth');
@@ -30,6 +30,7 @@ router.post('/reset-password', authLimiter, validate(resetPasswordSchema), reset
 
 router.get('/me', authenticate, me);
 router.patch('/me', authenticate, validate(updateProfileSchema), updateProfile);
+router.delete('/me', authenticate, deleteAccount);
 router.post('/me/avatar', authenticate, avatarUpload.single('avatar'), uploadAvatar);
 
 module.exports = router;
