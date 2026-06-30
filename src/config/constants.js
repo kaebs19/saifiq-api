@@ -83,6 +83,9 @@ const CATEGORY_CONFIG = {
   language:  { label: '\u0644\u063A\u0629',        icon: '\uD83D\uDCDD', types: ['mcq', 'quick_input'],             defaultDifficulty: 'medium', extraTime: 3 },
   general:   { label: '\u062B\u0642\u0627\u0641\u0629 \u0639\u0627\u0645\u0629', icon: '\uD83E\uDDE0', types: ['mcq', 'quick_input', 'numeric'], defaultDifficulty: 'easy',   extraTime: 0 },
   math:      { label: '\u0631\u064A\u0627\u0636\u064A\u0627\u062A',    icon: '\uD83D\uDD22', types: ['mcq', 'numeric'],               defaultDifficulty: 'hard',   extraTime: 5 },
+  cinema:      { label: '\u0633\u064A\u0646\u0645\u0627 \u0648\u0623\u0641\u0644\u0627\u0645', icon: '\uD83C\uDFAC', types: ['mcq', 'quick_input'],             defaultDifficulty: 'easy',   extraTime: 0 },
+  celebrities: { label: '\u0645\u0634\u0627\u0647\u064A\u0631',       icon: '\u2B50', types: ['mcq', 'quick_input'],             defaultDifficulty: 'easy',   extraTime: 0 },
+  health:      { label: '\u0637\u0628 \u0648\u0635\u062D\u0629',      icon: '\uD83E\uDE7A', types: ['mcq', 'quick_input', 'numeric'], defaultDifficulty: 'medium', extraTime: 0 },
 };
 
 module.exports = {
