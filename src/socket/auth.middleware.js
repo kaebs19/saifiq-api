@@ -7,6 +7,8 @@ const socketAuth = async (socket, next) => {
     if (!token) return next(new Error('Authentication required'));
 
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    if (decoded.type === 'refresh') return next(new Error('Invalid token'));
+
     const user = await User.findByPk(decoded.id, {
       attributes: ['id', 'username', 'role', 'isBanned'],
     });

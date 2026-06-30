@@ -86,6 +86,12 @@ const updateProfileSchema = Joi.object({
   'object.min': 'يجب إرسال حقل واحد على الأقل للتعديل',
 });
 
+const refreshSchema = Joi.object({
+  refreshToken: Joi.string().required().messages({
+    'any.required': 'Refresh token مطلوب',
+  }),
+});
+
 module.exports = {
   adminLoginSchema,
   registerSchema,
@@ -96,4 +102,5 @@ module.exports = {
   verifyResetCodeSchema,
   resetPasswordSchema,
   updateProfileSchema,
+  refreshSchema,
 };

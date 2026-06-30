@@ -20,15 +20,36 @@ const appleJwksClient = jwksClient({
   cacheMaxAge: 86400000,
 });
 
+// ── Token Config ──
+// access  : قصير نسبياً، يُستخدم في كل طلب (Authorization header)
+// refresh : طويل العمر، يُستخدم فقط لتجديد الـ access عند انتهائه
+// ملاحظة: JWT_REFRESH_SECRET اختياري — يرجع تلقائياً لـ JWT_SECRET
+//         حتى يعمل التجديد بدون أي تعديل env على السيرفر.
+const ACCESS_TTL = process.env.JWT_EXPIRES_IN || '7d';
+const REFRESH_TTL = process.env.JWT_REFRESH_EXPIRES_IN || '180d';
+const REFRESH_SECRET = process.env.JWT_REFRESH_SECRET || process.env.JWT_SECRET;
+
 // ── Helpers ──
 
-const generateToken = (user) => {
-  return jwt.sign(
-    { id: user.id, email: user.email, role: user.role },
+const generateAccessToken = (user) =>
+  jwt.sign(
+    { id: user.id, email: user.email, role: user.role, type: 'access' },
     process.env.JWT_SECRET,
-    { expiresIn: process.env.JWT_EXPIRES_IN || '7d' }
+    { expiresIn: ACCESS_TTL }
   );
-};
+
+const generateRefreshToken = (user) =>
+  jwt.sign(
+    { id: user.id, type: 'refresh' },
+    REFRESH_SECRET,
+    { expiresIn: REFRESH_TTL }
+  );
+
+/// يُرجع زوج التوكنات الذي تتوقعه كل مسارات الدخول
+const generateAuthTokens = (user) => ({
+  token: generateAccessToken(user),
+  refreshToken: generateRefreshToken(user),
+});
 
 const sanitizeUser = (user) => ({
   id: user.id,
@@ -66,7 +87,7 @@ const adminLogin = async (email, password) => {
     throw new AppError('\u0643\u0644\u0645\u0629 \u0627\u0644\u0645\u0631\u0648\u0631 \u063A\u064A\u0631 \u0635\u062D\u064A\u062D\u0629', 401);
   }
 
-  return { token: generateToken(user), user: sanitizeUser(user) };
+  return { ...generateAuthTokens(user), user: sanitizeUser(user) };
 };
 
 // ── Player Register ──
@@ -93,7 +114,7 @@ const register = async ({ username, email, password, country }) => {
     role: ROLES.PLAYER,
   });
 
-  return { token: generateToken(user), user: sanitizeUser(user) };
+  return { ...generateAuthTokens(user), user: sanitizeUser(user) };
 };
 
 // ── Player Login ──
@@ -118,7 +139,7 @@ const login = async (email, password) => {
     throw new AppError('\u0643\u0644\u0645\u0629 \u0627\u0644\u0645\u0631\u0648\u0631 \u063A\u064A\u0631 \u0635\u062D\u064A\u062D\u0629', 401);
   }
 
-  return { token: generateToken(user), user: sanitizeUser(user) };
+  return { ...generateAuthTokens(user), user: sanitizeUser(user) };
 };
 
 // ── Google Sign-In ──
@@ -162,7 +183,7 @@ const googleLogin = async (idToken) => {
     });
   }
 
-  return { token: generateToken(user), user: sanitizeUser(user) };
+  return { ...generateAuthTokens(user), user: sanitizeUser(user) };
 };
 
 // ── Apple Sign-In ──
@@ -209,7 +230,7 @@ const appleLogin = async (identityToken, fullName) => {
     });
   }
 
-  return { token: generateToken(user), user: sanitizeUser(user) };
+  return { ...generateAuthTokens(user), user: sanitizeUser(user) };
 };
 
 // ── Profile ──
@@ -258,6 +279,33 @@ const uploadAvatar = async (userId, file) => {
   return { avatarUrl };
 };
 
+// ── Refresh Session ──
+// يستقبل refresh token صالحاً ويُصدر زوج توكنات جديداً (sliding session).
+// تدوير الـ refresh token مع كل تجديد يُطيل عمر الجلسة طالما المستخدم نشط.
+const refreshSession = async (refreshToken) => {
+  let decoded;
+  try {
+    decoded = jwt.verify(refreshToken, REFRESH_SECRET);
+  } catch (err) {
+    throw new AppError('انتهت صلاحية الجلسة، يرجى تسجيل الدخول مجدداً', 401);
+  }
+
+  // لا نقبل access token هنا — فقط refresh
+  if (decoded.type !== 'refresh') {
+    throw new AppError('توكن غير صالح', 401);
+  }
+
+  const user = await User.findByPk(decoded.id);
+  if (!user) {
+    throw new AppError('المستخدم غير موجود', 404);
+  }
+  if (user.isBanned) {
+    throw new AppError('هذا الحساب محظور', 403);
+  }
+
+  return { ...generateAuthTokens(user), user: sanitizeUser(user) };
+};
+
 // ── Delete Account ──
 
 const deleteAccount = async (userId) => {
@@ -278,4 +326,4 @@ const ensureUniqueUsername = async (base) => {
   return username;
 };
 
-module.exports = { adminLogin, register, login, googleLogin, appleLogin, getMe, updateProfile, uploadAvatar, deleteAccount };
+module.exports = { adminLogin, register, login, googleLogin, appleLogin, refreshSession, getMe, updateProfile, uploadAvatar, deleteAccount };

@@ -10,7 +10,12 @@ const authenticate = (req, res, next) => {
     }
 
     const token = header.split(' ')[1];
-    req.user = jwt.verify(token, process.env.JWT_SECRET);
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    // refresh token لا يصلح للمصادقة على الطلبات العادية
+    if (decoded.type === 'refresh') {
+      throw new AppError('Authentication required', 401);
+    }
+    req.user = decoded;
     next();
   } catch (err) {
     next(err);
@@ -27,7 +32,9 @@ const optionalAuth = (req, res, next) => {
   try {
     const token = header.split(' ')[1];
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    req.user = decoded;
+    if (decoded.type !== 'refresh') {
+      req.user = decoded;
+    }
   } catch (err) {
     // Token invalid — proceed without user
   }

@@ -35,6 +35,11 @@ const appleSignIn = asyncHandler(async (req, res) => {
   ApiResponse.success(res, data, '\u062A\u0645 \u062A\u0633\u062C\u064A\u0644 \u0627\u0644\u062F\u062E\u0648\u0644 \u0628\u0646\u062C\u0627\u062D');
 });
 
+const refresh = asyncHandler(async (req, res) => {
+  const data = await authService.refreshSession(req.body.refreshToken);
+  ApiResponse.success(res, data, 'تم تجديد الجلسة');
+});
+
 const me = asyncHandler(async (req, res) => {
   const user = await authService.getMe(req.user.id);
   ApiResponse.success(res, user);
@@ -69,7 +74,7 @@ const resetPassword = asyncHandler(async (req, res) => {
 });
 
 module.exports = {
-  adminLogin, register, login, googleSignIn, appleSignIn, me,
+  adminLogin, register, login, googleSignIn, appleSignIn, refresh, me,
   updateProfile, uploadAvatar, deleteAccount,
   forgotPassword, verifyResetCode, resetPassword,
 };
