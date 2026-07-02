@@ -7,12 +7,14 @@ const { ITEM_TYPES } = require('../config/constants');
 
 const SPIN_KEY = (userId) => `spin:${userId}:last`;
 const EXTRA_KEY = (userId, date) => `spin:${userId}:extra:${date}`;
+const AD_KEY = (userId, date) => `spin:${userId}:ad:${date}`;
 
 const DEFAULT_CONFIG = {
   enabled: true,
   cooldownHours: 24,
   extraSpinCost: 10,
   maxExtraSpinsPerDay: 3,
+  maxAdSpinsPerDay: 5,
   slots: [
     { type: 'gold', value: 5, weight: 30, color: '#3b82f6', label: '5 ذهب' },
     { type: 'gold', value: 10, weight: 20, color: '#22c55e', label: '10 ذهب' },
@@ -38,6 +40,7 @@ const getStatus = async (userId) => {
 
   const lastSpin = await redis.get(SPIN_KEY(userId));
   const extraToday = parseInt(await redis.get(EXTRA_KEY(userId, todayKey()))) || 0;
+  const adToday = parseInt(await redis.get(AD_KEY(userId, todayKey()))) || 0;
 
   let canSpin = true;
   let nextFreeIn = 0;
@@ -58,6 +61,8 @@ const getStatus = async (userId) => {
     extraSpinsUsed: extraToday,
     maxExtraSpins: config.maxExtraSpinsPerDay,
     extraSpinCost: config.extraSpinCost,
+    adSpinsUsed: adToday,
+    maxAdSpins: config.maxAdSpinsPerDay ?? 5,
     slots: config.slots.map(({ type, color, label }) => ({ type, color, label })),
   };
 };
@@ -72,7 +77,7 @@ const pickSlot = (slots) => {
   return slots[slots.length - 1];
 };
 
-const spin = async (userId, useExtra = false) => {
+const spin = async (userId, useExtra = false, isAdSpin = false) => {
   const config = await getConfig();
   if (!config.enabled) throw new AppError('\u0627\u0644\u0635\u062D\u0646 \u0627\u0644\u064A\u0648\u0645\u064A \u063A\u064A\u0631 \u0645\u0641\u0639\u0644 \u062D\u0627\u0644\u064A\u0627\u064B', 400);
 
@@ -80,15 +85,24 @@ const spin = async (userId, useExtra = false) => {
   const cooldownMs = config.cooldownHours * 3600 * 1000;
   const isFree = !lastSpin || (Date.now() - parseInt(lastSpin)) >= cooldownMs;
 
-  if (!isFree && !useExtra) {
+  if (isAdSpin) {
+    // \u062F\u0648\u0631\u0627\u0646 \u0645\u0643\u062A\u0633\u0628 \u0628\u0645\u0634\u0627\u0647\u062F\u0629 \u0625\u0639\u0644\u0627\u0646 \u2014 \u064A\u062A\u062C\u0627\u0648\u0632 \u0627\u0644\u0645\u0647\u0644\u0629 \u0648\u0628\u0644\u0627 \u062A\u0643\u0644\u0641\u0629 \u0630\u0647\u0628\u060C \u0628\u062D\u062F\u0651 \u064A\u0648\u0645\u064A \u0644\u0645\u0646\u0639 \u0627\u0644\u0627\u0633\u062A\u063A\u0644\u0627\u0644
+    const maxAd = config.maxAdSpinsPerDay ?? 5;
+    const adToday = parseInt(await redis.get(AD_KEY(userId, todayKey()))) || 0;
+    if (adToday >= maxAd) {
+      throw new AppError('\u0648\u0635\u0644\u062A \u0627\u0644\u062D\u062F \u0627\u0644\u0623\u0642\u0635\u0649 \u0644\u062F\u0648\u0631\u0627\u062A \u0627\u0644\u0625\u0639\u0644\u0627\u0646 \u0627\u0644\u064A\u0648\u0645', 400);
+    }
+    await redis.incr(AD_KEY(userId, todayKey()));
+    await redis.expire(AD_KEY(userId, todayKey()), 86400);
+  } else if (!isFree && !useExtra) {
     throw new AppError('\u0627\u0646\u062A\u0638\u0631 \u0627\u0646\u062A\u0647\u0627\u0621 \u0627\u0644\u0645\u0647\u0644\u0629 \u0623\u0648 \u0627\u0633\u062A\u062E\u062F\u0645 \u062F\u0648\u0631\u0629 \u0625\u0636\u0627\u0641\u064A\u0629', 400);
   }
 
-  if (useExtra && isFree) {
+  if (!isAdSpin && useExtra && isFree) {
     throw new AppError('\u0644\u062F\u064A\u0643 \u062F\u0648\u0631\u0629 \u0645\u062C\u0627\u0646\u064A\u0629 \u0645\u062A\u0627\u062D\u0629', 400);
   }
 
-  if (useExtra) {
+  if (!isAdSpin && useExtra) {
     const extraToday = parseInt(await redis.get(EXTRA_KEY(userId, todayKey()))) || 0;
     if (extraToday >= config.maxExtraSpinsPerDay) {
       throw new AppError('\u0648\u0635\u0644\u062A \u0627\u0644\u062D\u062F \u0627\u0644\u0623\u0642\u0635\u0649 \u0644\u0644\u062F\u0648\u0631\u0627\u062A \u0627\u0644\u0625\u0636\u0627\u0641\u064A\u0629 \u0627\u0644\u064A\u0648\u0645', 400);
@@ -115,8 +129,8 @@ const spin = async (userId, useExtra = false) => {
   // Apply reward
   await applyReward(userId, slot);
 
-  // Set cooldown (only on free spin)
-  if (isFree) {
+  // Set cooldown (only on a real free spin — ad spins don't consume it)
+  if (!isAdSpin && isFree) {
     await redis.set(SPIN_KEY(userId), String(Date.now()), 'EX', cooldownMs / 1000);
   }
 

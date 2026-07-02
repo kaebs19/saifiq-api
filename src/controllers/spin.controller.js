@@ -9,7 +9,8 @@ const getStatus = asyncHandler(async (req, res) => {
 
 const spin = asyncHandler(async (req, res) => {
   const useExtra = req.body.useExtra === true;
-  const result = await spinService.spin(req.user.id, useExtra);
+  const adSpin = req.body.adSpin === true;
+  const result = await spinService.spin(req.user.id, useExtra, adSpin);
   ApiResponse.success(res, result, `\u0631\u0628\u062D\u062A: ${result.reward.label}`);
 });
 
