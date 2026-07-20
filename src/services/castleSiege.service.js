@@ -8,6 +8,7 @@
 const { Op } = require('sequelize');
 const { Match, MatchPlayer, Question, User, UserItem, Transaction, sequelize } = require('../models');
 const { redis } = require('../config/redis');
+const { answersMatch } = require('../utils/arabic');
 
 const STATE_KEY = (matchId) => `cs:${matchId}:state`;
 const STATE_TTL = 3600;
@@ -129,6 +130,9 @@ const initMatch = async (matchId) => {
       score: 0,
       power: STARTING_POWER,
       hp: 0,
+      maxHp: 0,           // 🆕 set after Phase 1 (= power) — used for achievements
+      minHpReached: 0,    // 🆕 lowest HP this player ever had during the match
+      fastestCount: 0,    // 🆕 number of questions where they were fastest correct
       answered: false,
       answer: null,
       timeMs: null,
@@ -287,8 +291,8 @@ const resolveQuestion = async (matchId) => {
       isExact = Number.isInteger(selectedIdx) && selectedIdx === q.correctOptionIdx;
       diff = isExact ? 0 : 999;
     } else {
-      // textInput
-      isExact = ans.toLowerCase() === correct.toLowerCase();
+      // textInput — تطبيع عربي (همزات/تشكيل/ة-ه) قبل المقارنة
+      isExact = answersMatch(ans, correct);
       diff = isExact ? 0 : 999;
     }
 
@@ -323,6 +327,10 @@ const resolveQuestion = async (matchId) => {
 
       state.players[r.userId].power += pts;
       state.players[r.userId].score += pts;
+      // 🆕 track for "speed_demon" — count of times this player was fastest with a correct answer
+      if (fastest) {
+        state.players[r.userId].fastestCount = (state.players[r.userId].fastestCount || 0) + 1;
+      }
 
       phaseResults.push({
         userId: r.userId,
@@ -430,6 +438,10 @@ const resolveQuestion = async (matchId) => {
           }
 
           targetState.hp = Math.max(0, targetState.hp - actualDamage);
+          // 🆕 track lowest HP for "comeback_king" achievement
+          if (targetState.hp < (targetState.minHpReached ?? targetState.hp)) {
+            targetState.minHpReached = targetState.hp;
+          }
           damageEvents.push({
             attackerId: winner.userId,
             targetId,
@@ -439,6 +451,10 @@ const resolveQuestion = async (matchId) => {
           });
         }
         attack = { events: damageEvents };
+        // 🆕 winner was fastest correct → bump counter for "speed_demon"
+        if (winner.isExact) {
+          attackerState.fastestCount = (attackerState.fastestCount || 0) + 1;
+        }
         if (attackerState.doubleDamageActive) attackerState.doubleDamageActive = false;
       }
 
@@ -527,6 +543,8 @@ const advance = async (matchId) => {
     const powers = {};
     for (const id of state.playerIds) {
       state.players[id].hp = state.players[id].power;
+      state.players[id].maxHp = state.players[id].power;          // 🆕 reference for "perfect defense"
+      state.players[id].minHpReached = state.players[id].power;   // 🆕 starts equal
       powers[id] = state.players[id].power;
     }
     state.phase = 'battle';
@@ -599,9 +617,32 @@ const finalize = async (matchId, winnerId) => {
 
   const scoresSnap = {};
   const hpSnap = {};
+  // 🆕 per-player context for achievement checks (read BEFORE clearState)
+  const ctxByUser = {};
   for (const id of state.playerIds) {
     scoresSnap[id] = state.players[id].score;
     hpSnap[id] = state.players[id].hp;
+    ctxByUser[id] = {
+      isWin: id === winnerId,
+      matchType: '1v1',
+      myHp: state.players[id].hp,
+      myMaxHp: state.players[id].maxHp || state.players[id].power || 0,
+      minHpReached: state.players[id].minHpReached ?? state.players[id].hp,
+      fastestCount: state.players[id].fastestCount || 0,
+      opponentsCount: state.playerIds.length - 1,
+    };
+  }
+
+  // 🆕 Run achievement checks (after stats committed) — emit happens in handler
+  let unlocksByUser = {};
+  try {
+    const achievements = require('./achievements.service');
+    for (const uid of state.playerIds) {
+      const newOnes = await achievements.checkAll(uid, ctxByUser[uid]);
+      if (newOnes && newOnes.length) unlocksByUser[uid] = newOnes;
+    }
+  } catch (e) {
+    console.error('[finalize] achievement check failed:', e.message);
   }
 
   await clearState(matchId);
@@ -610,6 +651,7 @@ const finalize = async (matchId, winnerId) => {
     winnerId,
     scores: scoresSnap,
     hp: hpSnap,
+    achievementsUnlocked: unlocksByUser,  // 🆕 { userId: [unlock,...] }
     rewards: {
       // معلومات الرهن (iOS يحسب net حسب الفائز)
       wager: WAGER_AMOUNT,

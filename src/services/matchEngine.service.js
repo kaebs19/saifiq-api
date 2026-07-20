@@ -1,6 +1,7 @@
 const { Match, MatchPlayer, Question, User, UserItem, Transaction, sequelize } = require('../models');
 const { redis } = require('../config/redis');
 const { GOLD_COSTS } = require('../config/constants');
+const { answersMatch } = require('../utils/arabic');
 
 const STATE_KEY = (matchId) => `match:${matchId}:state`;
 const QUESTIONS_PER_MATCH = 8;
@@ -125,7 +126,7 @@ const isCorrectAnswer = (question, answer) => {
     return Math.abs(num - correct) <= (question.numericTolerance || 0);
   }
   if (question.type === 'quick_input') {
-    return String(answer).trim().toLowerCase() === String(question.correctAnswer).trim().toLowerCase();
+    return answersMatch(answer, question.correctAnswer);
   }
   return false;
 };
